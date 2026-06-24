@@ -23,6 +23,7 @@ import {
   listIndexesTool,
   getTableConstraintsTool,
 } from './tools/metadata.js';
+import { calculateCaMarginTool } from './tools/caMargin.js';
 import { getRateLimiter } from './utils/rateLimiter.js';
 
 // Read version from package.json to keep it in sync with npm releases
@@ -286,6 +287,68 @@ export function createServer(sessionConfig?: DB2iConfig, sessionId?: string): Mc
         sessionId,
       }),
       'Failed to get constraints',
+      sessionContext
+    )
+  );
+
+  // Register calculate_ca_marge tool
+  server.registerTool(
+    'calculate_ca_marge',
+    {
+      title: 'Calculate CA & Gross Margin',
+      description:
+        'Calcule le chiffre d\'affaires HT et la marge brute sur les factures clients ' +
+        'des sociétés du groupe TINI (IBM i / DB2 for i). ' +
+        'Trois axes disponibles : par société (society), par client (client), par article (article). ' +
+        'Filtre obligatoire : date_debut et date_fin au format YYYYMMDD. ' +
+        'Retourne CA HT, coût d\'achat, marge brute, taux de marge et totaux agrégés.',
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        axis: z
+          .enum(['society', 'client', 'article'])
+          .describe('Axe d\'agrégation : society | client | article'),
+        date_debut: z
+          .string()
+          .regex(/^\d{8}$/, 'Format YYYYMMDD requis')
+          .describe('Date de début de période au format YYYYMMDD (ex: 20260101)'),
+        date_fin: z
+          .string()
+          .regex(/^\d{8}$/, 'Format YYYYMMDD requis')
+          .describe('Date de fin de période au format YYYYMMDD (ex: 20261231)'),
+        cdsoc: z
+          .union([z.string(), z.array(z.string())])
+          .optional()
+          .describe('Code(s) société. Défaut : toutes les sociétés du groupe TINI'),
+        cdcli: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('Filtre sur un client spécifique (utile avec axis=client)'),
+        cdart: z
+          .string()
+          .max(10)
+          .optional()
+          .describe('Filtre sur un article spécifique (utile avec axis=article)'),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(1000)
+          .optional()
+          .default(100)
+          .describe('Nombre maximum de lignes retournées (défaut: 100, max: 1000)'),
+        order_by: z
+          .enum(['ca', 'marge', 'taux_marge'])
+          .optional()
+          .default('ca')
+          .describe('Tri du résultat : ca | marge | taux_marge (défaut: ca)'),
+      },
+    },
+    withToolHandler(
+      (args, sessionId) =>
+        calculateCaMarginTool({ ...args, sessionId }),
+      'Calcul CA/marge échoué',
       sessionContext
     )
   );
