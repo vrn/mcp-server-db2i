@@ -8,7 +8,8 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         projectService: {
-          allowDefaultProject: ['tests/*.ts', 'tests/integration/*.ts', 'tests/auth/*.ts'],
+          allowDefaultProject: ['tests/*.ts', 'tests/integration/*.ts', 'tests/auth/*.ts', 'tests/tools/*.ts'],
+          maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 30,
         },
         tsconfigRootDir: import.meta.dirname,
       },

@@ -94,12 +94,13 @@ describe('MCP Server Integration', () => {
   });
 
   describe('Tool Discovery', () => {
-    it('should list all 7 registered tools', async () => {
+    it('should list all 10 registered tools', async () => {
       const { tools } = await client.listTools();
 
-      expect(tools).toHaveLength(7);
+      expect(tools).toHaveLength(10);
 
       const toolNames = tools.map((t) => t.name);
+      // Core DB2i tools
       expect(toolNames).toContain('execute_query');
       expect(toolNames).toContain('list_schemas');
       expect(toolNames).toContain('list_tables');
@@ -107,6 +108,10 @@ describe('MCP Server Integration', () => {
       expect(toolNames).toContain('list_views');
       expect(toolNames).toContain('list_indexes');
       expect(toolNames).toContain('get_table_constraints');
+      // BBA business tools
+      expect(toolNames).toContain('calculate_ca_marge');
+      expect(toolNames).toContain('get_client_360');
+      expect(toolNames).toContain('get_fournisseur_360');
     });
 
     it('should have correct metadata for execute_query tool', async () => {

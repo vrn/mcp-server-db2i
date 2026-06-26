@@ -24,6 +24,8 @@ import {
   getTableConstraintsTool,
 } from './tools/metadata.js';
 import { calculateCaMarginTool } from './tools/caMargin.js';
+import { getClient360Tool } from './tools/client360.js';
+import { getFournisseur360Tool } from './tools/fournisseur360.js';
 import { getRateLimiter } from './utils/rateLimiter.js';
 
 // Read version from package.json to keep it in sync with npm releases
@@ -349,6 +351,107 @@ export function createServer(sessionConfig?: DB2iConfig, sessionId?: string): Mc
       (args, sessionId) =>
         calculateCaMarginTool({ ...args, sessionId }),
       'Calcul CA/marge échoué',
+      sessionContext
+    )
+  );
+
+  // -------------------------------------------------------------------------
+  // get_client_360
+  // -------------------------------------------------------------------------
+  server.registerTool(
+    'get_client_360',
+    {
+      title: 'Fiche client 360°',
+      description:
+        'Retourne une fiche complète à 360° pour un client du groupe TINI (IBM i / DB2 for i). ' +
+        'Contient 5 blocs : identité (raison sociale, adresse, représentant, catégorie), ' +
+        'CA HT + marge brute N et N-1 calculés depuis les factures (CFACENT/CFACLGN), ' +
+        'tendance mensuelle sur 24 mois depuis CRMCAHT (pré-agrégé), ' +
+        'top 10 articles par CA depuis CRMCONSO, ' +
+        'alertes (encours HT/comptable, code surveillance, blocage BIL, taux RFA).',
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        cdsoc: z
+          .string()
+          .length(2)
+          .describe('Code société (2 caractères, ex: "01")'),
+        cdcli: z
+          .number()
+          .int()
+          .positive()
+          .describe('Code client (entier positif)'),
+        annee: z
+          .number()
+          .int()
+          .min(2000)
+          .max(2099)
+          .optional()
+          .describe('Année de référence pour les calculs N/N-1 (défaut: année courante)'),
+        adrnum: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe(
+            'N° adresse de livraison — filtre CRMCAHT et CRMCONSO sur une agence précise du client. ' +
+            'Sans ce paramètre, toutes les adresses sont agrégées (vue globale client).'
+          ),
+      },
+    },
+    withToolHandler(
+      (args, sessionId) =>
+        getClient360Tool({ ...args, sessionId }) as Promise<ToolResult>,
+      'Fiche client 360° échouée',
+      sessionContext
+    )
+  );
+
+  // -------------------------------------------------------------------------
+  // get_fournisseur_360
+  // -------------------------------------------------------------------------
+  server.registerTool(
+    'get_fournisseur_360',
+    {
+      title: 'Fiche fournisseur 360°',
+      description:
+        'Retourne une fiche complète à 360° pour un fournisseur du groupe TINI (IBM i / DB2 for i). ' +
+        'Contient 5 blocs : identité (raison sociale, adresse, délai livraison, blocage), ' +
+        'achats HT N et N-1 calculés depuis les BL fournisseur (FLIVENT/FLIVLGN), ' +
+        'tendance mensuelle sur 24 mois glissants (calculée, pas pré-agrégée), ' +
+        'top 10 articles par montant achat HT sur l\'année N, ' +
+        'alertes (blocage fournisseur, taux RFA, montant RFA obtenu, seuil RFA).',
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        cdsoc: z
+          .string()
+          .length(2)
+          .describe('Code société (2 caractères, ex: "01")'),
+        cdfou: z
+          .number()
+          .int()
+          .positive()
+          .describe('Code fournisseur (entier positif)'),
+        annee: z
+          .number()
+          .int()
+          .min(2000)
+          .max(2099)
+          .optional()
+          .describe('Année de référence pour les calculs N/N-1 (défaut: année courante)'),
+        cdagel: z
+          .string()
+          .length(2)
+          .optional()
+          .describe(
+            'Code agence réceptrice (FLIVENT.CDAGEL, 2 caractères) — filtre tous les blocs achat ' +
+            'sur cette agence. Sans ce paramètre, toutes les agences sont agrégées (vue globale fournisseur).'
+          ),
+      },
+    },
+    withToolHandler(
+      (args, sessionId) =>
+        getFournisseur360Tool({ ...args, sessionId }) as Promise<ToolResult>,
+      'Fiche fournisseur 360° échouée',
       sessionContext
     )
   );
