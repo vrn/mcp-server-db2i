@@ -102,8 +102,11 @@ describe('getClient360Tool', () => {
               { CDART: 'ART001', ARTLIB: 'SACS 110L', ARTFAM: 'HYGIEN', FACDATE: 20250615, QTE_FACTUREE: 3000, CA_HT: 11000, MARGE_HT: 3500 },
               { CDART: 'ART001', ARTLIB: 'SACS 110L', ARTFAM: 'HYGIEN', FACDATE: 20240615, QTE_FACTUREE: 1000, CA_HT: 4000,  MARGE_HT: 1500 },
               { CDART: 'ART001', ARTLIB: 'SACS 110L', ARTFAM: 'HYGIEN', FACDATE: 20241015, QTE_FACTUREE: 1000, CA_HT: 3000,  MARGE_HT: 1000 },
+              { CDART: 'ART001', ARTLIB: 'SACS 110L', ARTFAM: 'HYGIEN', FACDATE: 20230615, QTE_FACTUREE: 800,  CA_HT: 2400,  MARGE_HT: 800 },
+              { CDART: 'ART001', ARTLIB: 'SACS 110L', ARTFAM: 'HYGIEN', FACDATE: 20231015, QTE_FACTUREE: 200,  CA_HT: 600,   MARGE_HT: 200 },
               { CDART: 'ART002', ARTLIB: 'GANTS B',   ARTFAM: 'HYGIEN', FACDATE: 20250615, QTE_FACTUREE: 1500, CA_HT: 7000,  MARGE_HT: 2000 },
               { CDART: 'ART002', ARTLIB: 'GANTS B',   ARTFAM: 'HYGIEN', FACDATE: 20240615, QTE_FACTUREE: 500,  CA_HT: 2000,  MARGE_HT: 700 },
+              { CDART: 'ART002', ARTLIB: 'GANTS B',   ARTFAM: 'HYGIEN', FACDATE: 20230615, QTE_FACTUREE: 400,  CA_HT: 1600,  MARGE_HT: 500 },
             ]));
           } else {
             return Promise.resolve(makeResult([
@@ -182,7 +185,7 @@ describe('getClient360Tool', () => {
       expect(result.tendance_mensuelle[0].mois).toBe(6);
     });
 
-    it('maps top_articles with YTD N, Full N-1 and YTD N-1 breakdown', async () => {
+    it('maps top_articles with YTD N, Full N-1, YTD N-1, Full N-2, and YTD N-2 breakdown', async () => {
       const result = await getClient360Tool({ cdsoc: '01', cdcli: 123, annee: 2025 });
 
       expect(result.success).toBe(true);
@@ -208,6 +211,16 @@ describe('getClient360Tool', () => {
       expect(art1.annee_n1_ytd.qte_livree).toBe(1000);
       expect(art1.annee_n1_ytd.ca_ht).toBe(4000);
       expect(art1.annee_n1_ytd.mb_ht).toBe(1500);
+
+      // Année N-2 Entière (2023) -> qte = 800 + 200 = 1000, ca = 2400 + 600 = 3000, mb = 800 + 200 = 1000
+      expect(art1.annee_n2.qte_livree).toBe(1000);
+      expect(art1.annee_n2.ca_ht).toBe(3000);
+      expect(art1.annee_n2.mb_ht).toBe(1000);
+
+      // Année N-2 YTD (mois <= 6 de 2023) -> qte = 800, ca = 2400, mb = 800
+      expect(art1.annee_n2_ytd.qte_livree).toBe(800);
+      expect(art1.annee_n2_ytd.ca_ht).toBe(2400);
+      expect(art1.annee_n2_ytd.mb_ht).toBe(800);
     });
 
     it('maps alertes with enctot/enccpt from CLIENTS row and rfa_taux from CLIRFA', async () => {

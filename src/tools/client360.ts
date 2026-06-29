@@ -103,6 +103,8 @@ export interface Client360TopArticle {
   annee_n: Client360TopArticleMetrics;
   annee_n1: Client360TopArticleMetrics;
   annee_n1_ytd: Client360TopArticleMetrics;
+  annee_n2: Client360TopArticleMetrics;
+  annee_n2_ytd: Client360TopArticleMetrics;
 }
 
 /** Alerts and risk indicators bloc */
@@ -442,31 +444,14 @@ async function queryTopArticles(
   adrnum: number | undefined,
   sessionId?: string
 ): Promise<Client360TopArticle[]> {
-  let dateDebut: number;
-  let dateFin: number;
-
   const now = new Date();
-  const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1; // 1 to 12
 
-  // 1. Calculate boundaries of the 24-month window for identifying the top 10 articles
-  if (referenceYear === currentYear) {
-    const lastDay = new Date(currentYear, currentMonth, 0).getDate();
-    dateFin = currentYear * 10000 + currentMonth * 100 + lastDay;
+  // 1. Calculate boundaries of N-2 to N (from Jan 1st of N-2 to Dec 31st of N)
+  const dateDebut = (referenceYear - 2) * 10000 + 101; // (N-2)-01-01
+  const dateFin = referenceYear * 10000 + 1231;        // N-12-31
 
-    let startYear = currentYear - 2;
-    let startMonth = currentMonth + 1;
-    if (startMonth > 12) {
-      startMonth -= 12;
-      startYear += 1;
-    }
-    dateDebut = startYear * 10000 + startMonth * 100 + 1;
-  } else {
-    dateDebut = (referenceYear - 1) * 10000 + 101; // (referenceYear - 1)-01-01
-    dateFin = referenceYear * 10000 + 1231;        // referenceYear-12-31
-  }
-
-  // 2. Identify the top 10 articles by CA HT on the 24-month window
+  // 2. Identify the top 10 articles by CA HT on the 3-year window
   let top10Sql: string;
   let top10Binds: unknown[];
 
@@ -511,13 +496,10 @@ async function queryTopArticles(
 
   if (top10Arts.length === 0) return [];
 
-  // 3. Query monthly details for these 10 articles over N and N-1
+  // 3. Query monthly details for these 10 articles over N, N-1, and N-2
   const placeholders = top10Arts.map(() => '?').join(',');
   let detailsSql: string;
   let detailsBinds: unknown[];
-
-  const startGlobalDate = (referenceYear - 1) * 10000 + 101; // (N-1)-01-01
-  const endGlobalDate = referenceYear * 10000 + 1231;        // N-12-31
 
   if (adrnum !== undefined) {
     detailsSql = `
@@ -541,7 +523,7 @@ async function queryTopArticles(
         AND E.FACDATE BETWEEN ? AND ?
         AND L.FACQTE <> 0
       GROUP BY L.CDART, E.FACDATE`;
-    detailsBinds = [cdsoc, cdcli, adrnum, ...top10Arts, startGlobalDate, endGlobalDate];
+    detailsBinds = [cdsoc, cdcli, adrnum, ...top10Arts, dateDebut, dateFin];
   } else {
     detailsSql = `
       SELECT
@@ -562,7 +544,7 @@ async function queryTopArticles(
         AND E.FACDATE BETWEEN ? AND ?
         AND L.FACQTE <> 0
       GROUP BY L.CDART, E.FACDATE`;
-    detailsBinds = [cdsoc, cdcli, ...top10Arts, startGlobalDate, endGlobalDate];
+    detailsBinds = [cdsoc, cdcli, ...top10Arts, dateDebut, dateFin];
   }
 
   const detailsResult = await executeQuery(detailsSql, detailsBinds, sessionId);
@@ -579,6 +561,8 @@ async function queryTopArticles(
     annee_n: PeriodAccum;
     annee_n1: PeriodAccum;
     annee_n1_ytd: PeriodAccum;
+    annee_n2: PeriodAccum;
+    annee_n2_ytd: PeriodAccum;
   }
 
   const groups = new Map<string, ArtGroup>();
@@ -589,13 +573,18 @@ async function queryTopArticles(
       annee_n: { qte: 0, ca: 0, mb: 0 },
       annee_n1: { qte: 0, ca: 0, mb: 0 },
       annee_n1_ytd: { qte: 0, ca: 0, mb: 0 },
+      annee_n2: { qte: 0, ca: 0, mb: 0 },
+      annee_n2_ytd: { qte: 0, ca: 0, mb: 0 },
     });
   }
 
-  // Calculate N-1 YTD date limit: last day of current month in N-1
+  // Calculate N-1 and N-2 YTD date limits using last day of current month in N-1 and N-2
   const cutMonth = currentMonth;
   const lastDayN1 = new Date(referenceYear - 1, cutMonth, 0).getDate();
   const dateFinN1Ytd = (referenceYear - 1) * 10000 + cutMonth * 100 + lastDayN1;
+
+  const lastDayN2 = new Date(referenceYear - 2, cutMonth, 0).getDate();
+  const dateFinN2Ytd = (referenceYear - 2) * 10000 + cutMonth * 100 + lastDayN2;
 
   for (const row of detailsResult.rows) {
     const cdart = String(row.CDART ?? '').trim();
@@ -623,16 +612,27 @@ async function queryTopArticles(
 
     // Année précédente N-1
     if (year === (referenceYear - 1)) {
-      // Année précédente entière
       group.annee_n1.qte += qte;
       group.annee_n1.ca += ca;
       group.annee_n1.mb += mb;
 
-      // Année précédente YTD (jusqu'au dernier jour du mois en cours)
       if (facdate <= dateFinN1Ytd) {
         group.annee_n1_ytd.qte += qte;
         group.annee_n1_ytd.ca += ca;
         group.annee_n1_ytd.mb += mb;
+      }
+    }
+
+    // Année N-2
+    if (year === (referenceYear - 2)) {
+      group.annee_n2.qte += qte;
+      group.annee_n2.ca += ca;
+      group.annee_n2.mb += mb;
+
+      if (facdate <= dateFinN2Ytd) {
+        group.annee_n2_ytd.qte += qte;
+        group.annee_n2_ytd.ca += ca;
+        group.annee_n2_ytd.mb += mb;
       }
     }
   }
@@ -660,6 +660,8 @@ async function queryTopArticles(
       annee_n:         mapMetrics(group.annee_n),
       annee_n1:        mapMetrics(group.annee_n1),
       annee_n1_ytd:    mapMetrics(group.annee_n1_ytd),
+      annee_n2:        mapMetrics(group.annee_n2),
+      annee_n2_ytd:    mapMetrics(group.annee_n2_ytd),
     };
   });
 }
