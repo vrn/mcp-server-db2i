@@ -133,6 +133,14 @@ describe('getClient360Tool', () => {
         if (q.includes('FROM CLIRFA'))   return Promise.resolve(makeResult([{ RFATAUX: 0.5, RFAAA: 2025 }]));
         if (q.includes('FROM TOURNEL'))  return Promise.resolve(makeResult(tournelRow));
         if (q.includes('FROM CLILIV'))   return Promise.resolve(makeResult(cliliv));
+        if (q.includes('FROM CFACLIV')) {
+          return Promise.resolve(makeResult([
+            { FACDATE: 20250615, FRAIPORT: 25.50 },
+            { FACDATE: 20250510, FRAIPORT: 0.0 }, // Franco
+            { FACDATE: 20240615, FRAIPORT: 35.00 },
+            { FACDATE: 20241015, FRAIPORT: 15.00 },
+          ]));
+        }
         return Promise.resolve(makeResult([]));
       });
     });
@@ -237,15 +245,35 @@ describe('getClient360Tool', () => {
       expect(result.alertes.lib_surv).toBe('RAS');
     });
 
-    it('maps transport bloc with CLILIV addresses', async () => {
+    it('maps transport bloc with sites count and comparative shipping costs', async () => {
       const result = await getClient360Tool({ cdsoc: '01', cdcli: 123, annee: 2025 });
 
       expect(result.success).toBe(true);
       if (!result.success) return;
       expect(result.transport.cdtport).toBe('F');
       expect(result.transport.cdtrnliv).toBe('TOUR01');
-      expect(result.transport.adresses_livraison).toHaveLength(1);
-      expect(result.transport.adresses_livraison[0].lbtrnliv).toBe('TOUR NORD');
+      expect(result.transport.total_sites).toBe(1);
+      expect(result.transport.sites_par_departement).toEqual({ '59': 1 });
+
+      // Validation comparative port
+      expect(result.transport.frais_port.annee_n).toEqual({
+        total: 25.5,
+        moyen: 25.5,
+        nb_livraisons_facturees: 2,
+        nb_livraisons_avec_port: 1,
+      });
+      expect(result.transport.frais_port.annee_n1).toEqual({
+        total: 50.0,
+        moyen: 25.0,
+        nb_livraisons_facturees: 2,
+        nb_livraisons_avec_port: 2,
+      });
+      expect(result.transport.frais_port.annee_n1_ytd).toEqual({
+        total: 35.0,
+        moyen: 35.0,
+        nb_livraisons_facturees: 1,
+        nb_livraisons_avec_port: 1,
+      });
     });
   });
 
@@ -259,6 +287,7 @@ describe('getClient360Tool', () => {
         if (q.includes('FROM CLIENTS'))  return Promise.resolve(makeResult([clientsRow]));
         if (q.includes('FROM TOURNEL'))  return Promise.resolve(makeResult(tournelRow));
         if (q.includes('FROM CLILIV'))   return Promise.resolve(makeResult([])); // adrnum=2 → no match
+        if (q.includes('FROM CFACLIV'))  return Promise.resolve(makeResult([]));
         return Promise.resolve(makeResult([{ CA_HT: 0, COUT_ACHAT_HT: 0, MARGE_HT: 0, TAUX_MARGE_PCT: null }]));
       });
 

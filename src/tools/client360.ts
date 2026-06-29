@@ -125,29 +125,12 @@ export interface Client360Alertes {
   rfa_annee: number | null;
 }
 
-/** One delivery address with its transport settings (from CLILIV + TOURNEL) */
-export interface Client360AdresseLivraison {
-  adrnum: number;
-  raison: string;
-  adress1: string;
-  cdpost: string;
-  ville: string;
-  cdpays: string;
-  cdtrnliv: string;
-  /** Tour label from TOURNEL.LBTRNLIV (empty string if tour not found) */
-  lbtrnliv: string;
-  /** Transporter code from TOURNEL.CDTRANS */
-  cdtrans: string;
-  livdays: string;
-  notrnliv: number;
-  /** Delivery services flags */
-  livrvl: string;
-  livrmanu: string;
-  livrdepo: string;
-  livrrdv: string;
-  livrpams: string;
-  vfranco: number;
-  inactif: string;
+/** Metrics for shipping costs on a specific period */
+export interface Client360FraisPortMetrics {
+  total: number;
+  moyen: number;
+  nb_livraisons_facturees: number;
+  nb_livraisons_avec_port: number;
 }
 
 /** Transport conditions bloc */
@@ -168,27 +151,16 @@ export interface Client360Transport {
   ilivrais: string;
   /** Delivery remarks (CLIENTS.RLIVRAIS) */
   rlivrais: string;
-  /** Delivery time windows (HHMM integers, 0 = not set) */
-  horaires: {
-    am_debut: number;
-    am_fin: number;
-    pm_debut: number;
-    pm_fin: number;
+  /** Total active delivery sites */
+  total_sites: number;
+  /** Sites count by French department key (2 digits, or 'Autre') */
+  sites_par_departement: { [dept: string]: number };
+  /** Comparative shipping costs metrics */
+  frais_port: {
+    annee_n: Client360FraisPortMetrics;
+    annee_n1: Client360FraisPortMetrics;
+    annee_n1_ytd: Client360FraisPortMetrics;
   };
-  /** Delivery service flags */
-  services: {
-    rdv: string;
-    manutention: string;
-    depotage: string;
-    vl: string;
-    livrpams: string;
-  };
-  /**
-   * All active delivery addresses from CLILIV with per-address transport settings.
-   * When adrnum is provided: single-element array for that address.
-   * When absent: all active addresses.
-   */
-  adresses_livraison: Client360AdresseLivraison[];
 }
 
 /** Successful result */
@@ -737,6 +709,7 @@ async function queryTransport(
   cdsoc: string,
   cdcli: number,
   clientsRow: ClientsRow,
+  referenceYear: number,
   adrnum: number | undefined,
   sessionId?: string
 ): Promise<Client360Transport> {
@@ -760,72 +733,122 @@ async function queryTransport(
     }
   }
 
-  // Fetch delivery addresses from CLILIV
+  // Fetch active delivery addresses from CLILIV (INACTIF <> 'I')
   const adrnumFilter = adrnum !== undefined ? 'AND C.ADRNUM = ?' : "AND C.INACTIF <> 'I'";
   const adrnumBinds: unknown[] = adrnum !== undefined ? [adrnum] : [];
 
   const adressesSql = `
-    SELECT
-      C.ADRNUM, C.RAISON, C.ADRESS1, C.CDPOST, C.VILLE, C.CDPAYS,
-      C.CDTRNLIV, C.NOTRNLIV, C.LIVDAYS, C.VFRANCO,
-      C.LIVRVL, C.LIVRMANU, C.LIVRDEPO, C.LIVRRDV, C.LIVRPAMS, C.INACTIF,
-      COALESCE(T.LBTRNLIV, '') AS LBTRNLIV,
-      COALESCE(T.CDTRANS,  '') AS CDTRANS
+    SELECT C.CDPOST
     FROM CLILIV C
-    LEFT JOIN TOURNEL T
-      ON  T.CDSOC    = C.CDSOC
-      AND T.CDTRNLIV = C.CDTRNLIV
     WHERE C.CDSOC = ? AND C.CDCLI = ?
-      ${adrnumFilter}
-    ORDER BY C.ADRNUM`;
+      ${adrnumFilter}`;
 
   const adressesBind: unknown[] = [cdsoc, cdcli, ...adrnumBinds];
   const adressesResult = await executeQuery(adressesSql, adressesBind, sessionId);
 
-  const adresses: Client360AdresseLivraison[] = adressesResult.rows.map(row => ({
-    adrnum:    Number(row.ADRNUM   ?? 0),
-    raison:    String(row.RAISON   ?? '').trim(),
-    adress1:   String(row.ADRESS1  ?? '').trim(),
-    cdpost:    String(row.CDPOST   ?? '').trim(),
-    ville:     String(row.VILLE    ?? '').trim(),
-    cdpays:    String(row.CDPAYS   ?? '').trim(),
-    cdtrnliv:  String(row.CDTRNLIV ?? '').trim(),
-    lbtrnliv:  String(row.LBTRNLIV ?? '').trim(),
-    cdtrans:   String(row.CDTRANS  ?? '').trim(),
-    livdays:   String(row.LIVDAYS  ?? '').trim(),
-    notrnliv:  Number(row.NOTRNLIV ?? 0),
-    livrvl:    String(row.LIVRVL   ?? '').trim(),
-    livrmanu:  String(row.LIVRMANU ?? '').trim(),
-    livrdepo:  String(row.LIVRDEPO ?? '').trim(),
-    livrrdv:   String(row.LIVRRDV  ?? '').trim(),
-    livrpams:  String(row.LIVRPAMS ?? '').trim(),
-    vfranco:   Number(row.VFRANCO  ?? 0),
-    inactif:   String(row.INACTIF  ?? '').trim(),
-  }));
+  const total_sites = adressesResult.rows.length;
+  const sites_par_departement: { [dept: string]: number } = {};
+
+  for (const row of adressesResult.rows) {
+    const cdpost = String(row.CDPOST ?? '').trim();
+    if (cdpost) {
+      const dept = cdpost.substring(0, 2);
+      if (dept.match(/^\d{2}$/)) {
+        sites_par_departement[dept] = (sites_par_departement[dept] || 0) + 1;
+      } else {
+        sites_par_departement['Autre'] = (sites_par_departement['Autre'] || 0) + 1;
+      }
+    }
+  }
+
+  // Fetch shipping costs from CFACLIV over N and N-1 periods
+  const dateDebut = (referenceYear - 1) * 10000 + 101;
+  const dateFin = referenceYear * 10000 + 1231;
+
+  const portFilter = adrnum !== undefined ? 'AND L.LIVADRNUM = ?' : '';
+  const portBinds = adrnum !== undefined ? [adrnum] : [];
+
+  const portSql = `
+    SELECT
+      E.FACDATE,
+      DOUBLE(COALESCE(L.FRAIPORT, 0)) AS FRAIPORT
+    FROM CFACLIV L
+    JOIN CFACENT E ON E.CDSOC = L.CDSOC AND E.FACNUMC = L.FACNUMC
+    WHERE E.CDSOC = ?
+      AND E.CDCLI = ?
+      AND E.FACDATE BETWEEN ? AND ?
+      ${portFilter}`;
+
+  const portResult = await executeQuery(portSql, [cdsoc, cdcli, dateDebut, dateFin, ...portBinds], sessionId);
+
+  interface PortAccum {
+    somme: number;
+    nbTotal: number;
+    nbAvecPort: number;
+  }
+  const accumN: PortAccum = { somme: 0, nbTotal: 0, nbAvecPort: 0 };
+  const accumN1: PortAccum = { somme: 0, nbTotal: 0, nbAvecPort: 0 };
+  const accumN1Ytd: PortAccum = { somme: 0, nbTotal: 0, nbAvecPort: 0 };
+
+  const now = new Date();
+  const currentMonth = now.getMonth() + 1;
+  const lastDayN1 = new Date(referenceYear - 1, currentMonth, 0).getDate();
+  const dateFinN1Ytd = (referenceYear - 1) * 10000 + currentMonth * 100 + lastDayN1;
+
+  for (const row of portResult.rows) {
+    const facdate = Number(row.FACDATE ?? 0);
+    const port = Number(row.FRAIPORT ?? 0);
+    const year = Math.floor(facdate / 10000);
+
+    if (year === referenceYear) {
+      accumN.nbTotal += 1;
+      if (port > 0) {
+        accumN.somme += port;
+        accumN.nbAvecPort += 1;
+      }
+    } else if (year === referenceYear - 1) {
+      accumN1.nbTotal += 1;
+      if (port > 0) {
+        accumN1.somme += port;
+        accumN1.nbAvecPort += 1;
+      }
+
+      if (facdate <= dateFinN1Ytd) {
+        accumN1Ytd.nbTotal += 1;
+        if (port > 0) {
+          accumN1Ytd.somme += port;
+          accumN1Ytd.nbAvecPort += 1;
+        }
+      }
+    }
+  }
+
+  const formatPort = (accum: PortAccum): Client360FraisPortMetrics => {
+    const moyen = accum.nbAvecPort > 0 ? accum.somme / accum.nbAvecPort : 0;
+    return {
+      total:                   Math.round(accum.somme * 100) / 100,
+      moyen:                   Math.round(moyen * 100) / 100,
+      nb_livraisons_facturees: accum.nbTotal,
+      nb_livraisons_avec_port: accum.nbAvecPort,
+    };
+  };
 
   return {
-    cdtport:   s('CDTPORT'),
-    vfranco:   Number(clientsRow.VFRANCO ?? 0),
-    cdtrnliv:  cdtrnlivPrincipal,
-    lbtrnliv:  lbtrnlivPrincipal,
-    cdtrans:   cdtransPrincipal,
-    livdays:   s('LIVDAYS'),
-    ilivrais:  s('ILIVRAIS'),
-    rlivrais:  s('RLIVRAIS'),
-    horaires: {
-      am_debut: Number(clientsRow.AMDTIMLIV ?? 0),
-      am_fin:   Number(clientsRow.AMFTIMLIV ?? 0),
-      pm_debut: Number(clientsRow.PMDTIMLIV ?? 0),
-      pm_fin:   Number(clientsRow.PMFTIMLIV ?? 0),
+    cdtport:               s('CDTPORT'),
+    vfranco:               Number(clientsRow.VFRANCO ?? 0),
+    cdtrnliv:              cdtrnlivPrincipal,
+    lbtrnliv:              lbtrnlivPrincipal,
+    cdtrans:               cdtransPrincipal,
+    livdays:               s('LIVDAYS'),
+    ilivrais:              s('ILIVRAIS'),
+    rlivrais:              s('RLIVRAIS'),
+    total_sites,
+    sites_par_departement,
+    frais_port: {
+      annee_n:             formatPort(accumN),
+      annee_n1:            formatPort(accumN1),
+      annee_n1_ytd:        formatPort(accumN1Ytd),
     },
-    services: {
-      rdv:         s('LIVRRDV'),
-      manutention: s('LIVRMANU'),
-      depotage:    s('LIVRDEPO'),
-      vl:          s('LIVRVL'),
-      livrpams:    s('LIVRPAMS'),
-    },
-    adresses_livraison: adresses,
   };
 }
 
@@ -879,7 +902,7 @@ export async function getClient360Tool(input: Client360Input): Promise<Client360
       queryTendanceMensuelle(cdsoc, cdcli, annee, adrnum, sessionId),
       queryTopArticles(cdsoc, cdcli, annee, adrnum, sessionId),
       queryRfa(cdsoc, cdcli, annee, sessionId),
-      queryTransport(cdsoc, cdcli, clientRow.row, adrnum, sessionId),
+      queryTransport(cdsoc, cdcli, clientRow.row, annee, adrnum, sessionId),
     ]);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
