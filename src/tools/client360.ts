@@ -419,105 +419,109 @@ async function queryTendanceMensuelle(
 }
 
 // ---------------------------------------------------------------------------
-// ST4 — Top 10 articles from CRMCONSO
+// ST4 — Top 10 articles calculated from CFACENT / CFACLGN
 // ---------------------------------------------------------------------------
 
-/** Accumulator per article during CRMCONSO pivot */
-interface ArticleAccum {
-  qte_livree: number;
-  ca_ht: number;
-  mb_ht: number;
-}
-
 /**
- * Reads CRMCONSO for the client and pivots 12 slots TypeScript-side.
- * When `adrnum` is provided, restricts to that delivery address.
- * Otherwise aggregates across all ADRNUM and $CODPDA (global client view).
+ * Calculates the top 10 articles consumed by the client over the last 24 months.
+ * When `adrnum` is provided, restricts to that delivery address via CFACLIV.
+ * Otherwise aggregates globally across all addresses.
  * Returns top 10 articles sorted by CA HT descending.
  */
 async function queryTopArticles(
   cdsoc: string,
   cdcli: number,
+  referenceYear: number,
   adrnum: number | undefined,
   sessionId?: string
 ): Promise<Client360TopArticle[]> {
-  // 1 row per CDART × ADRNUM × $CODPDA — TypeScript accumulates by CDART
-  const slotCols = Array.from({ length: 12 }, (_, i) => {
-    const nn = String(i + 1).padStart(2, '0');
-    return `WQLIV${nn}, WPVHT${nn}, WP100${nn}, WPRHT${nn}`;
-  }).join(', ');
+  let dateDebut: number;
+  let dateFin: number;
 
-  const adrnumFilter = adrnum !== undefined ? 'AND ADRNUM = ?' : '';
-  const sql = `
-    SELECT CDART, ${slotCols}
-    FROM CRMCONSO
-    WHERE CDSOC = ? AND CDCLI = ? ${adrnumFilter}`;
-  const binds: unknown[] = adrnum !== undefined ? [cdsoc, cdcli, adrnum] : [cdsoc, cdcli];
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
+  if (referenceYear === currentYear) {
+    const currentMonth = now.getMonth() + 1; // 1 to 12
+    const lastDay = new Date(currentYear, currentMonth, 0).getDate();
+    dateFin = currentYear * 10000 + currentMonth * 100 + lastDay;
+
+    let startYear = currentYear - 2;
+    let startMonth = currentMonth + 1;
+    if (startMonth > 12) {
+      startMonth -= 12;
+      startYear += 1;
+    }
+    dateDebut = startYear * 10000 + startMonth * 100 + 1;
+  } else {
+    dateDebut = (referenceYear - 1) * 10000 + 101; // (referenceYear - 1)-01-01
+    dateFin = referenceYear * 10000 + 1231;        // referenceYear-12-31
+  }
+
+  let sql: string;
+  let binds: unknown[];
+
+  if (adrnum !== undefined) {
+    sql = `
+      SELECT
+        L.CDART,
+        MAX(A.ARTLIB) AS ARTLIB,
+        MAX(A.ARTFAM) AS ARTFAM,
+        SUM(DOUBLE(L.FACQTE)) AS QTE_FACTUREE,
+        ${CA_EXPR} AS CA_HT,
+        ${MB_EXPR} AS MARGE_HT
+      FROM CFACLGN L
+      JOIN CFACENT E ON E.CDSOC = L.CDSOC AND E.FACNUMC = L.FACNUMC
+      JOIN CFACLIV V ON V.CDSOC = E.CDSOC AND V.FACNUMC = E.FACNUMC AND V.CDCLI = E.CDCLI
+      JOIN ARTICLE A ON A.CDSOC = L.CDSOC AND A.CDART = L.CDART
+      ${PARAM_JOIN}
+      WHERE E.CDSOC = ?
+        AND E.CDCLI = ?
+        AND V.LIVADRNUM = ?
+        AND E.FACDATE BETWEEN ? AND ?
+        AND L.FACQTE <> 0
+      GROUP BY L.CDART
+      ORDER BY CA_HT DESC
+      FETCH FIRST 10 ROWS ONLY`;
+    binds = [cdsoc, cdcli, adrnum, dateDebut, dateFin];
+  } else {
+    sql = `
+      SELECT
+        L.CDART,
+        MAX(A.ARTLIB) AS ARTLIB,
+        MAX(A.ARTFAM) AS ARTFAM,
+        SUM(DOUBLE(L.FACQTE)) AS QTE_FACTUREE,
+        ${CA_EXPR} AS CA_HT,
+        ${MB_EXPR} AS MARGE_HT
+      FROM CFACLGN L
+      JOIN CFACENT E ON E.CDSOC = L.CDSOC AND E.FACNUMC = L.FACNUMC
+      JOIN ARTICLE A ON A.CDSOC = L.CDSOC AND A.CDART = L.CDART
+      ${PARAM_JOIN}
+      WHERE E.CDSOC = ?
+        AND E.CDCLI = ?
+        AND E.FACDATE BETWEEN ? AND ?
+        AND L.FACQTE <> 0
+      GROUP BY L.CDART
+      ORDER BY CA_HT DESC
+      FETCH FIRST 10 ROWS ONLY`;
+    binds = [cdsoc, cdcli, dateDebut, dateFin];
+  }
 
   const result = await executeQuery(sql, binds, sessionId);
 
-  // Accumulate by CDART across all rows and slots
-  const accum = new Map<string, ArticleAccum>();
-
-  for (const row of result.rows) {
-    const cdart = String(row.CDART ?? '').trim();
-    if (!cdart) continue;
-
-    const entry = accum.get(cdart) ?? { qte_livree: 0, ca_ht: 0, mb_ht: 0 };
-
-    for (let i = 1; i <= 12; i++) {
-      const nn  = String(i).padStart(2, '0');
-      const qte = Number(row[`WQLIV${nn}`] ?? 0);
-      const pv  = Number(row[`WPVHT${nn}`] ?? 0);
-      const rem = Number(row[`WP100${nn}`] ?? 0);
-      const pr  = Number(row[`WPRHT${nn}`] ?? 0);
-      if (qte === 0) continue;
-
-      const netPv = pv * (1 - rem / 100);
-      entry.qte_livree += qte;
-      entry.ca_ht      += netPv * qte;
-      entry.mb_ht      += (netPv - pr) * qte;
-    }
-    accum.set(cdart, entry);
-  }
-
-  if (accum.size === 0) return [];
-
-  // Sort by CA descending, keep top 10
-  const sorted = [...accum.entries()]
-    .sort(([, a], [, b]) => b.ca_ht - a.ca_ht)
-    .slice(0, 10);
-
-  const top10Arts = sorted.map(([cdart]) => cdart);
-
-  // Enrich with ARTLIB + ARTFAM from ARTICLE table
-  const placeholders = top10Arts.map(() => '?').join(',');
-  const artSql = `
-    SELECT CDART, ARTLIB, ARTFAM
-    FROM ARTICLE
-    WHERE CDSOC = ? AND CDART IN (${placeholders})`;
-  const artResult = await executeQuery(artSql, [cdsoc, ...top10Arts], sessionId);
-
-  const artMap = new Map<string, { artlib: string; artfam: string }>();
-  for (const row of artResult.rows) {
-    artMap.set(
-      String(row.CDART ?? '').trim(),
-      { artlib: String(row.ARTLIB ?? '').trim(), artfam: String(row.ARTFAM ?? '').trim() }
-    );
-  }
-
-  return sorted.map(([cdart, acc]) => {
-    const art = artMap.get(cdart) ?? { artlib: '', artfam: '' };
-    const txMarge = acc.ca_ht === 0
+  return result.rows.map(row => {
+    const ca = Number(row.CA_HT ?? 0);
+    const mb = Number(row.MARGE_HT ?? 0);
+    const txMarge = ca === 0
       ? null
-      : Math.round(acc.mb_ht / acc.ca_ht * 10000) / 100;
+      : Math.round(mb / ca * 10000) / 100;
     return {
-      cdart,
-      artlib:          art.artlib,
-      artfam:          art.artfam,
-      qte_livree:      Math.round(acc.qte_livree * 100) / 100,
-      ca_ht:           Math.round(acc.ca_ht * 100) / 100,
-      mb_ht:           Math.round(acc.mb_ht * 100) / 100,
+      cdart:          String(row.CDART ?? '').trim(),
+      artlib:          String(row.ARTLIB ?? '').trim(),
+      artfam:          String(row.ARTFAM ?? '').trim(),
+      qte_livree:      Math.round(Number(row.QTE_FACTUREE ?? 0) * 100) / 100,
+      ca_ht:           Math.round(ca * 100) / 100,
+      mb_ht:           Math.round(mb * 100) / 100,
       taux_marge_pct:  txMarge,
     };
   });
@@ -734,7 +738,7 @@ export async function getClient360Tool(input: Client360Input): Promise<Client360
       queryCanYear(cdsoc, cdcli, annee,     sessionId),
       queryCanYear(cdsoc, cdcli, annee - 1, sessionId),
       queryTendanceMensuelle(cdsoc, cdcli, annee, adrnum, sessionId),
-      queryTopArticles(cdsoc, cdcli, adrnum, sessionId),
+      queryTopArticles(cdsoc, cdcli, annee, adrnum, sessionId),
       queryRfa(cdsoc, cdcli, annee, sessionId),
       queryTransport(cdsoc, cdcli, clientRow.row, adrnum, sessionId),
     ]);

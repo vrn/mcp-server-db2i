@@ -34,30 +34,6 @@ const clientsRow: Record<string, unknown> = {
 };
 
 
-/**
- * CRMCONSO row fixture — uses CRMCONSO slot column schema:
- * CDART (10A), WQLIV01-12 (qty), WPVHT01-12 (PV unit HT),
- * WP100 01-12 (% remise ×100 — so 0 = no discount), WPRHT01-12 (PR unit HT)
- *
- * Slot 01: ART001 — qty=5000, pv=3.60 (no rem), pr=2.40  → ca=18000, mb=6000
- * Slot 02: ART002 — qty=2000, pv=4.50 (no rem), pr=3.15  → ca=9000, mb=2700
- * Slots 03-12: empty (qty=0)
- */
-const crmconsoRows: Record<string, unknown>[] = [
-  {
-    CDART: 'ART001',
-    WQLIV01: 5000, WPVHT01: 3.60, WP10001: 0, WPRHT01: 2.40,
-    WQLIV02: 2000, WPVHT02: 4.50, WP10002: 0, WPRHT02: 3.15,
-    ...Object.fromEntries(
-      Array.from({ length: 10 }, (_, i) => {
-        const nn = String(i + 3).padStart(2, '0');
-        return [
-          [`WQLIV${nn}`, 0], [`WPVHT${nn}`, 0], [`WP100${nn}`, 0], [`WPRHT${nn}`, 0],
-        ];
-      }).flat()
-    ),
-  },
-];
 
 /**
  * Minimal CLILIV result — the query includes LEFT JOIN TOURNEL inline,
@@ -135,11 +111,12 @@ describe('getClient360Tool', () => {
             : { CA_HT: 132000, COUT_ACHAT_HT: 98000,  MARGE_HT: 34000, TAUX_MARGE_PCT: 25.76 },
           ]));
         }
-        if (q.includes('FROM CRMCONSO')) return Promise.resolve(makeResult(crmconsoRows));
-        if (q.includes('FROM ARTICLE'))  return Promise.resolve(makeResult([
-          { CDART: 'ART001', ARTLIB: 'SACS 110L', ARTFAM: 'HYGIEN' },
-          { CDART: 'ART002', ARTLIB: 'GANTS B',   ARTFAM: 'HYGIEN' },
-        ]));
+        if (q.includes('FROM CFACLGN') && q.includes('GROUP BY')) {
+          return Promise.resolve(makeResult([
+            { CDART: 'ART001', ARTLIB: 'SACS 110L', ARTFAM: 'HYGIEN', QTE_FACTUREE: 5000, CA_HT: 18000, MARGE_HT: 6000 },
+            { CDART: 'ART002', ARTLIB: 'GANTS B',   ARTFAM: 'HYGIEN', QTE_FACTUREE: 2000, CA_HT: 9000,  MARGE_HT: 2700 },
+          ]));
+        }
         if (q.includes('FROM CLIRFA'))   return Promise.resolve(makeResult([{ RFATAUX: 0.5, RFAAA: 2025 }]));
         if (q.includes('FROM TOURNEL'))  return Promise.resolve(makeResult(tournelRow));
         if (q.includes('FROM CLILIV'))   return Promise.resolve(makeResult(cliliv));
