@@ -96,6 +96,22 @@ describe('getClient360Tool', () => {
         const q = String(sql).replace(/\s+/g, ' ').toUpperCase();
         const b = (binds as unknown[] | undefined) ?? [];
         if (q.includes('FROM CLIENTS'))  return Promise.resolve(makeResult([clientsRow]));
+        if (q.includes('FROM CFACLGN') && q.includes('GROUP BY')) {
+          if (q.includes('ARTLIB')) {
+            return Promise.resolve(makeResult([
+              { CDART: 'ART001', ARTLIB: 'SACS 110L', ARTFAM: 'HYGIEN', FACDATE: 20250615, QTE_FACTUREE: 3000, CA_HT: 11000, MARGE_HT: 3500 },
+              { CDART: 'ART001', ARTLIB: 'SACS 110L', ARTFAM: 'HYGIEN', FACDATE: 20240615, QTE_FACTUREE: 1000, CA_HT: 4000,  MARGE_HT: 1500 },
+              { CDART: 'ART001', ARTLIB: 'SACS 110L', ARTFAM: 'HYGIEN', FACDATE: 20241015, QTE_FACTUREE: 1000, CA_HT: 3000,  MARGE_HT: 1000 },
+              { CDART: 'ART002', ARTLIB: 'GANTS B',   ARTFAM: 'HYGIEN', FACDATE: 20250615, QTE_FACTUREE: 1500, CA_HT: 7000,  MARGE_HT: 2000 },
+              { CDART: 'ART002', ARTLIB: 'GANTS B',   ARTFAM: 'HYGIEN', FACDATE: 20240615, QTE_FACTUREE: 500,  CA_HT: 2000,  MARGE_HT: 700 },
+            ]));
+          } else {
+            return Promise.resolve(makeResult([
+              { CDART: 'ART001', CA_HT: 18000 },
+              { CDART: 'ART002', CA_HT: 9000 },
+            ]));
+          }
+        }
         if (q.includes('GROUP BY') && q.includes('FACDATE')) {
           return Promise.resolve(makeResult([
             { ANNEE: 2025, MOIS: 6, CA_HT: 14200, MARGE_HT: 3700 },
@@ -109,12 +125,6 @@ describe('getClient360Tool', () => {
           return Promise.resolve(makeResult([anneeDebut >= 2025
             ? { CA_HT: 145000, COUT_ACHAT_HT: 107000, MARGE_HT: 38000, TAUX_MARGE_PCT: 26.21 }
             : { CA_HT: 132000, COUT_ACHAT_HT: 98000,  MARGE_HT: 34000, TAUX_MARGE_PCT: 25.76 },
-          ]));
-        }
-        if (q.includes('FROM CFACLGN') && q.includes('GROUP BY')) {
-          return Promise.resolve(makeResult([
-            { CDART: 'ART001', ARTLIB: 'SACS 110L', ARTFAM: 'HYGIEN', QTE_FACTUREE: 5000, CA_HT: 18000, MARGE_HT: 6000 },
-            { CDART: 'ART002', ARTLIB: 'GANTS B',   ARTFAM: 'HYGIEN', QTE_FACTUREE: 2000, CA_HT: 9000,  MARGE_HT: 2700 },
           ]));
         }
         if (q.includes('FROM CLIRFA'))   return Promise.resolve(makeResult([{ RFATAUX: 0.5, RFAAA: 2025 }]));
@@ -170,6 +180,34 @@ describe('getClient360Tool', () => {
       expect(result.tendance_mensuelle.length).toBeGreaterThan(0);
       expect(result.tendance_mensuelle[0].annee).toBe(2025);
       expect(result.tendance_mensuelle[0].mois).toBe(6);
+    });
+
+    it('maps top_articles with YTD N, Full N-1 and YTD N-1 breakdown', async () => {
+      const result = await getClient360Tool({ cdsoc: '01', cdcli: 123, annee: 2025 });
+
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      expect(result.top_articles).toHaveLength(2);
+
+      const art1 = result.top_articles.find(a => a.cdart === 'ART001')!;
+      expect(art1).toBeDefined();
+      expect(art1.artlib).toBe('SACS 110L');
+      expect(art1.artfam).toBe('HYGIEN');
+
+      // Année N YTD (2025) -> qte = 3000, ca = 11000, mb = 3500
+      expect(art1.annee_n.qte_livree).toBe(3000);
+      expect(art1.annee_n.ca_ht).toBe(11000);
+      expect(art1.annee_n.mb_ht).toBe(3500);
+
+      // Année N-1 Entière (2024) -> qte = 1000 + 1000 = 2000, ca = 4000 + 3000 = 7000, mb = 1500 + 1000 = 2500
+      expect(art1.annee_n1.qte_livree).toBe(2000);
+      expect(art1.annee_n1.ca_ht).toBe(7000);
+      expect(art1.annee_n1.mb_ht).toBe(2500);
+
+      // Année N-1 YTD (mois <= 6 de 2024) -> qte = 1000, ca = 4000, mb = 1500
+      expect(art1.annee_n1_ytd.qte_livree).toBe(1000);
+      expect(art1.annee_n1_ytd.ca_ht).toBe(4000);
+      expect(art1.annee_n1_ytd.mb_ht).toBe(1500);
     });
 
     it('maps alertes with enctot/enccpt from CLIENTS row and rfa_taux from CLIRFA', async () => {

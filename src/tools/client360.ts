@@ -87,15 +87,22 @@ export interface Client360TrendMonth {
   mb_ht: number;
 }
 
+/** Metrics for a specific period of an article */
+export interface Client360TopArticleMetrics {
+  qte_livree: number;
+  ca_ht: number;
+  mb_ht: number;
+  taux_marge_pct: number | null;
+}
+
 /** One article in the top-10 */
 export interface Client360TopArticle {
   cdart: string;
   artlib: string;
   artfam: string;
-  qte_livree: number;
-  ca_ht: number;
-  mb_ht: number;
-  taux_marge_pct: number | null;
+  annee_n: Client360TopArticleMetrics;
+  annee_n1: Client360TopArticleMetrics;
+  annee_n1_ytd: Client360TopArticleMetrics;
 }
 
 /** Alerts and risk indicators bloc */
@@ -440,9 +447,10 @@ async function queryTopArticles(
 
   const now = new Date();
   const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1; // 1 to 12
 
+  // 1. Calculate boundaries of the 24-month window for identifying the top 10 articles
   if (referenceYear === currentYear) {
-    const currentMonth = now.getMonth() + 1; // 1 to 12
     const lastDay = new Date(currentYear, currentMonth, 0).getDate();
     dateFin = currentYear * 10000 + currentMonth * 100 + lastDay;
 
@@ -458,15 +466,66 @@ async function queryTopArticles(
     dateFin = referenceYear * 10000 + 1231;        // referenceYear-12-31
   }
 
-  let sql: string;
-  let binds: unknown[];
+  // 2. Identify the top 10 articles by CA HT on the 24-month window
+  let top10Sql: string;
+  let top10Binds: unknown[];
 
   if (adrnum !== undefined) {
-    sql = `
+    top10Sql = `
+      SELECT L.CDART, ${CA_EXPR} AS CA_HT
+      FROM CFACLGN L
+      JOIN CFACENT E ON E.CDSOC = L.CDSOC AND E.FACNUMC = L.FACNUMC
+      JOIN CFACLIV V ON V.CDSOC = E.CDSOC AND V.FACNUMC = E.FACNUMC AND V.CDCLI = E.CDCLI
+      ${PARAM_JOIN}
+      WHERE E.CDSOC = ?
+        AND E.CDCLI = ?
+        AND V.LIVADRNUM = ?
+        AND E.FACDATE BETWEEN ? AND ?
+        AND L.FACQTE <> 0
+      GROUP BY L.CDART
+      ORDER BY CA_HT DESC
+      FETCH FIRST 10 ROWS ONLY`;
+    top10Binds = [cdsoc, cdcli, adrnum, dateDebut, dateFin];
+  } else {
+    top10Sql = `
+      SELECT L.CDART, ${CA_EXPR} AS CA_HT
+      FROM CFACLGN L
+      JOIN CFACENT E ON E.CDSOC = L.CDSOC AND E.FACNUMC = L.FACNUMC
+      ${PARAM_JOIN}
+      WHERE E.CDSOC = ?
+        AND E.CDCLI = ?
+        AND E.FACDATE BETWEEN ? AND ?
+        AND L.FACQTE <> 0
+      GROUP BY L.CDART
+      ORDER BY CA_HT DESC
+      FETCH FIRST 10 ROWS ONLY`;
+    top10Binds = [cdsoc, cdcli, dateDebut, dateFin];
+  }
+
+  const top10Result = await executeQuery(top10Sql, top10Binds, sessionId);
+  if (top10Result.rows.length === 0) return [];
+
+  const top10Arts = top10Result.rows
+    .map(row => String(row.CDART ?? '').trim())
+    .filter(Boolean);
+
+  if (top10Arts.length === 0) return [];
+
+  // 3. Query monthly details for these 10 articles over N and N-1
+  const placeholders = top10Arts.map(() => '?').join(',');
+  let detailsSql: string;
+  let detailsBinds: unknown[];
+
+  const startGlobalDate = (referenceYear - 1) * 10000 + 101; // (N-1)-01-01
+  const endGlobalDate = referenceYear * 10000 + 1231;        // N-12-31
+
+  if (adrnum !== undefined) {
+    detailsSql = `
       SELECT
         L.CDART,
         MAX(A.ARTLIB) AS ARTLIB,
         MAX(A.ARTFAM) AS ARTFAM,
+        E.FACDATE,
         SUM(DOUBLE(L.FACQTE)) AS QTE_FACTUREE,
         ${CA_EXPR} AS CA_HT,
         ${MB_EXPR} AS MARGE_HT
@@ -478,18 +537,18 @@ async function queryTopArticles(
       WHERE E.CDSOC = ?
         AND E.CDCLI = ?
         AND V.LIVADRNUM = ?
+        AND L.CDART IN (${placeholders})
         AND E.FACDATE BETWEEN ? AND ?
         AND L.FACQTE <> 0
-      GROUP BY L.CDART
-      ORDER BY CA_HT DESC
-      FETCH FIRST 10 ROWS ONLY`;
-    binds = [cdsoc, cdcli, adrnum, dateDebut, dateFin];
+      GROUP BY L.CDART, E.FACDATE`;
+    detailsBinds = [cdsoc, cdcli, adrnum, ...top10Arts, startGlobalDate, endGlobalDate];
   } else {
-    sql = `
+    detailsSql = `
       SELECT
         L.CDART,
         MAX(A.ARTLIB) AS ARTLIB,
         MAX(A.ARTFAM) AS ARTFAM,
+        E.FACDATE,
         SUM(DOUBLE(L.FACQTE)) AS QTE_FACTUREE,
         ${CA_EXPR} AS CA_HT,
         ${MB_EXPR} AS MARGE_HT
@@ -499,30 +558,108 @@ async function queryTopArticles(
       ${PARAM_JOIN}
       WHERE E.CDSOC = ?
         AND E.CDCLI = ?
+        AND L.CDART IN (${placeholders})
         AND E.FACDATE BETWEEN ? AND ?
         AND L.FACQTE <> 0
-      GROUP BY L.CDART
-      ORDER BY CA_HT DESC
-      FETCH FIRST 10 ROWS ONLY`;
-    binds = [cdsoc, cdcli, dateDebut, dateFin];
+      GROUP BY L.CDART, E.FACDATE`;
+    detailsBinds = [cdsoc, cdcli, ...top10Arts, startGlobalDate, endGlobalDate];
   }
 
-  const result = await executeQuery(sql, binds, sessionId);
+  const detailsResult = await executeQuery(detailsSql, detailsBinds, sessionId);
 
-  return result.rows.map(row => {
+  // 4. Group and sum metrics in TypeScript by period
+  interface PeriodAccum {
+    qte: number;
+    ca: number;
+    mb: number;
+  }
+  interface ArtGroup {
+    artlib: string;
+    artfam: string;
+    annee_n: PeriodAccum;
+    annee_n1: PeriodAccum;
+    annee_n1_ytd: PeriodAccum;
+  }
+
+  const groups = new Map<string, ArtGroup>();
+  for (const cdart of top10Arts) {
+    groups.set(cdart, {
+      artlib: '',
+      artfam: '',
+      annee_n: { qte: 0, ca: 0, mb: 0 },
+      annee_n1: { qte: 0, ca: 0, mb: 0 },
+      annee_n1_ytd: { qte: 0, ca: 0, mb: 0 },
+    });
+  }
+
+  // Calculate N-1 YTD date limit: last day of current month in N-1
+  const cutMonth = currentMonth;
+  const lastDayN1 = new Date(referenceYear - 1, cutMonth, 0).getDate();
+  const dateFinN1Ytd = (referenceYear - 1) * 10000 + cutMonth * 100 + lastDayN1;
+
+  for (const row of detailsResult.rows) {
+    const cdart = String(row.CDART ?? '').trim();
+    const group = groups.get(cdart);
+    if (!group) continue;
+
+    if (!group.artlib) {
+      group.artlib = String(row.ARTLIB ?? '').trim();
+      group.artfam = String(row.ARTFAM ?? '').trim();
+    }
+
+    const facdate = Number(row.FACDATE ?? 0);
+    const qte = Number(row.QTE_FACTUREE ?? 0);
     const ca = Number(row.CA_HT ?? 0);
     const mb = Number(row.MARGE_HT ?? 0);
-    const txMarge = ca === 0
-      ? null
-      : Math.round(mb / ca * 10000) / 100;
+
+    const year = Math.floor(facdate / 10000);
+
+    // Année en cours N (YTD: du 01/01/N à aujourd'hui)
+    if (year === referenceYear) {
+      group.annee_n.qte += qte;
+      group.annee_n.ca += ca;
+      group.annee_n.mb += mb;
+    }
+
+    // Année précédente N-1
+    if (year === (referenceYear - 1)) {
+      // Année précédente entière
+      group.annee_n1.qte += qte;
+      group.annee_n1.ca += ca;
+      group.annee_n1.mb += mb;
+
+      // Année précédente YTD (jusqu'au dernier jour du mois en cours)
+      if (facdate <= dateFinN1Ytd) {
+        group.annee_n1_ytd.qte += qte;
+        group.annee_n1_ytd.ca += ca;
+        group.annee_n1_ytd.mb += mb;
+      }
+    }
+  }
+
+  // 5. Map accumulator to return structure
+  return top10Arts.map(cdart => {
+    const group = groups.get(cdart)!;
+
+    const mapMetrics = (accum: PeriodAccum): Client360TopArticleMetrics => {
+      const txMarge = accum.ca === 0
+        ? null
+        : Math.round(accum.mb / accum.ca * 10000) / 100;
+      return {
+        qte_livree:      Math.round(accum.qte * 100) / 100,
+        ca_ht:           Math.round(accum.ca * 100) / 100,
+        mb_ht:           Math.round(accum.mb * 100) / 100,
+        taux_marge_pct:  txMarge,
+      };
+    };
+
     return {
-      cdart:          String(row.CDART ?? '').trim(),
-      artlib:          String(row.ARTLIB ?? '').trim(),
-      artfam:          String(row.ARTFAM ?? '').trim(),
-      qte_livree:      Math.round(Number(row.QTE_FACTUREE ?? 0) * 100) / 100,
-      ca_ht:           Math.round(ca * 100) / 100,
-      mb_ht:           Math.round(mb * 100) / 100,
-      taux_marge_pct:  txMarge,
+      cdart,
+      artlib:          group.artlib,
+      artfam:          group.artfam,
+      annee_n:         mapMetrics(group.annee_n),
+      annee_n1:        mapMetrics(group.annee_n1),
+      annee_n1_ytd:    mapMetrics(group.annee_n1_ytd),
     };
   });
 }
