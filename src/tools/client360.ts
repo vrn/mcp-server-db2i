@@ -320,69 +320,100 @@ async function queryCanYear(
 }
 
 // ---------------------------------------------------------------------------
-// ST3 — 24-month trend from CRMCAHT
+// ST3 — 24-month trend calculated from CFACENT / CFACLGN
 // ---------------------------------------------------------------------------
 
 /**
- * Reads the 24 pre-aggregated monthly slots from CRMCAHT.
- * When `adrnum` is provided, filters to that specific delivery address.
- * Otherwise aggregates across all addresses (SUM on CA/MB, MAX on WANNE/WMOIS).
- * Returns slots sorted most-recent first, empty slots excluded.
+ * Calculates the 24-month monthly trend of CA and margin.
+ * When `adrnum` is provided, filters to that specific delivery address via CFACLIV.
+ * Otherwise aggregates globally across all addresses.
+ * Returns slots sorted most-recent first.
  */
 async function queryTendanceMensuelle(
   cdsoc: string,
   cdcli: number,
+  referenceYear: number,
   adrnum: number | undefined,
   sessionId?: string
 ): Promise<Client360TrendMonth[]> {
+  let dateDebut: number;
+  let dateFin: number;
+
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
+  if (referenceYear === currentYear) {
+    const currentMonth = now.getMonth() + 1; // 1 to 12
+    const lastDay = new Date(currentYear, currentMonth, 0).getDate();
+    dateFin = currentYear * 10000 + currentMonth * 100 + lastDay;
+
+    let startYear = currentYear - 2;
+    let startMonth = currentMonth + 1;
+    if (startMonth > 12) {
+      startMonth -= 12;
+      startYear += 1;
+    }
+    dateDebut = startYear * 10000 + startMonth * 100 + 1;
+  } else {
+    dateDebut = (referenceYear - 1) * 10000 + 101; // (referenceYear - 1)-01-01
+    dateFin = referenceYear * 10000 + 1231;        // referenceYear-12-31
+  }
+
   let sql: string;
   let binds: unknown[];
 
   if (adrnum !== undefined) {
-    // Single-address read: no aggregation needed, read columns directly
-    const cols = Array.from({ length: 24 }, (_, i) => {
-      const nn = String(i + 1).padStart(2, '0');
-      return `WCAHT${nn}, WMBHT${nn}, WANNE${nn}, WMOIS${nn}`;
-    }).join(', ');
     sql = `
-      SELECT ${cols}
-      FROM CRMCAHT
-      WHERE CDSOC = ? AND CDCLI = ? AND ADRNUM = ?`;
-    binds = [cdsoc, cdcli, adrnum];
+      SELECT
+        INTEGER(E.FACDATE / 10000) AS ANNEE,
+        MOD(INTEGER(E.FACDATE / 100), 100) AS MOIS,
+        ${CA_EXPR} AS CA_HT,
+        ${MB_EXPR} AS MARGE_HT
+      FROM CFACENT E
+      JOIN CFACLGN L ON L.CDSOC = E.CDSOC AND L.FACNUMC = E.FACNUMC
+      JOIN CFACLIV V ON V.CDSOC = E.CDSOC AND V.FACNUMC = E.FACNUMC AND V.CDCLI = E.CDCLI
+      ${PARAM_JOIN}
+      WHERE E.CDSOC = ?
+        AND E.CDCLI = ?
+        AND V.LIVADRNUM = ?
+        AND E.FACDATE BETWEEN ? AND ?
+        AND L.FACQTE <> 0
+      GROUP BY
+        INTEGER(E.FACDATE / 10000),
+        MOD(INTEGER(E.FACDATE / 100), 100)
+      ORDER BY ANNEE DESC, MOIS DESC`;
+    binds = [cdsoc, cdcli, adrnum, dateDebut, dateFin];
   } else {
-    // Global view: SUM on CA/MB to add up all addresses; MAX on WANNE/WMOIS (same calendar on all rows)
-    const slots = Array.from({ length: 24 }, (_, i) => {
-      const nn = String(i + 1).padStart(2, '0');
-      return `SUM(WCAHT${nn}) AS WCAHT${nn}, SUM(WMBHT${nn}) AS WMBHT${nn}, ` +
-             `MAX(WANNE${nn}) AS WANNE${nn}, MAX(WMOIS${nn}) AS WMOIS${nn}`;
-    }).join(',\n      ');
     sql = `
-      SELECT ${slots}
-      FROM CRMCAHT
-      WHERE CDSOC = ? AND CDCLI = ?`;
-    binds = [cdsoc, cdcli];
+      SELECT
+        INTEGER(E.FACDATE / 10000) AS ANNEE,
+        MOD(INTEGER(E.FACDATE / 100), 100) AS MOIS,
+        ${CA_EXPR} AS CA_HT,
+        ${MB_EXPR} AS MARGE_HT
+      FROM CFACENT E
+      JOIN CFACLGN L ON L.CDSOC = E.CDSOC AND L.FACNUMC = E.FACNUMC
+      ${PARAM_JOIN}
+      WHERE E.CDSOC = ?
+        AND E.CDCLI = ?
+        AND E.FACDATE BETWEEN ? AND ?
+        AND L.FACQTE <> 0
+      GROUP BY
+        INTEGER(E.FACDATE / 10000),
+        MOD(INTEGER(E.FACDATE / 100), 100)
+      ORDER BY ANNEE DESC, MOIS DESC`;
+    binds = [cdsoc, cdcli, dateDebut, dateFin];
   }
 
   const result = await executeQuery(sql, binds, sessionId);
-  if (result.rows.length === 0) return [];
+  
+  const months: Client360TrendMonth[] = result.rows.map(row => ({
+    annee: Number(row.ANNEE ?? 0),
+    mois:  Number(row.MOIS ?? 0),
+    ca_ht: Number(row.CA_HT ?? 0),
+    mb_ht: Number(row.MARGE_HT ?? 0),
+  }));
 
-  const row = result.rows[0];
-  const months: Client360TrendMonth[] = [];
-
-  for (let i = 1; i <= 24; i++) {
-    const nn    = String(i).padStart(2, '0');
-    const annee = Number(row[`WANNE${nn}`] ?? 0);
-    const mois  = Number(row[`WMOIS${nn}`] ?? 0);
-    if (annee === 0) continue;   // unset slot
-    months.push({
-      annee,
-      mois,
-      ca_ht: Number(row[`WCAHT${nn}`] ?? 0),
-      mb_ht: Number(row[`WMBHT${nn}`] ?? 0),
-    });
-  }
-
-  // Slot 01 is the most recent — already in correct order, but sort defensively
+  // Defensive sort, most-recent first
   months.sort((a, b) => b.annee - a.annee || b.mois - a.mois);
   return months;
 }
@@ -702,7 +733,7 @@ export async function getClient360Tool(input: Client360Input): Promise<Client360
     [canN, canN1, tendance, topArticles, rfa, transport] = await Promise.all([
       queryCanYear(cdsoc, cdcli, annee,     sessionId),
       queryCanYear(cdsoc, cdcli, annee - 1, sessionId),
-      queryTendanceMensuelle(cdsoc, cdcli, adrnum, sessionId),
+      queryTendanceMensuelle(cdsoc, cdcli, annee, adrnum, sessionId),
       queryTopArticles(cdsoc, cdcli, adrnum, sessionId),
       queryRfa(cdsoc, cdcli, annee, sessionId),
       queryTransport(cdsoc, cdcli, clientRow.row, adrnum, sessionId),

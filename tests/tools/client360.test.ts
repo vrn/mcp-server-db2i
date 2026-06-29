@@ -33,21 +33,6 @@ const clientsRow: Record<string, unknown> = {
   ILIVRAIS: 'Appeler avant livraison', RLIVRAIS: '',
 };
 
-/** CRMCAHT row with 2 populated slots */
-function crmcahtRow(slots: Array<{ nn: string; annee: number; mois: number; ca: number; mb: number }>) {
-  const row: Record<string, unknown> = {};
-  for (let i = 1; i <= 24; i++) {
-    const nn = String(i).padStart(2, '0');
-    row[`WCAHT${nn}`] = 0; row[`WMBHT${nn}`] = 0; row[`WANNE${nn}`] = 0; row[`WMOIS${nn}`] = 0;
-  }
-  for (const s of slots) {
-    row[`WCAHT${s.nn}`] = s.ca;
-    row[`WMBHT${s.nn}`] = s.mb;
-    row[`WANNE${s.nn}`] = s.annee;
-    row[`WMOIS${s.nn}`] = s.mois;
-  }
-  return row;
-}
 
 /**
  * CRMCONSO row fixture — uses CRMCONSO slot column schema:
@@ -135,6 +120,12 @@ describe('getClient360Tool', () => {
         const q = String(sql).replace(/\s+/g, ' ').toUpperCase();
         const b = (binds as unknown[] | undefined) ?? [];
         if (q.includes('FROM CLIENTS'))  return Promise.resolve(makeResult([clientsRow]));
+        if (q.includes('GROUP BY') && q.includes('FACDATE')) {
+          return Promise.resolve(makeResult([
+            { ANNEE: 2025, MOIS: 6, CA_HT: 14200, MARGE_HT: 3700 },
+            { ANNEE: 2025, MOIS: 5, CA_HT: 12800, MARGE_HT: 3200 },
+          ]));
+        }
         if (q.includes('FROM CFACENT')) {
           // Distinguish N vs N-1 by the date_debut bind (year * 10000 + 101)
           const dateDebut = b.find(v => typeof v === 'number' && v > 20000000);
@@ -144,10 +135,6 @@ describe('getClient360Tool', () => {
             : { CA_HT: 132000, COUT_ACHAT_HT: 98000,  MARGE_HT: 34000, TAUX_MARGE_PCT: 25.76 },
           ]));
         }
-        if (q.includes('FROM CRMCAHT'))  return Promise.resolve(makeResult([crmcahtRow([
-          { nn: '01', annee: 2025, mois: 6, ca: 14200, mb: 3700 },
-          { nn: '02', annee: 2025, mois: 5, ca: 12800, mb: 3200 },
-        ])]));
         if (q.includes('FROM CRMCONSO')) return Promise.resolve(makeResult(crmconsoRows));
         if (q.includes('FROM ARTICLE'))  return Promise.resolve(makeResult([
           { CDART: 'ART001', ARTLIB: 'SACS 110L', ARTFAM: 'HYGIEN' },
