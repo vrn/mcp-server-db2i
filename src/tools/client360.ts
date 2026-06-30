@@ -127,10 +127,10 @@ export interface Client360Alertes {
 
 /** Metrics for shipping costs on a specific period */
 export interface Client360FraisPortMetrics {
-  total: number;
-  moyen: number;
-  nb_livraisons_facturees: number;
-  nb_livraisons_avec_port: number;
+  facture: number;
+  depense: number;
+  depense_moyen: number;
+  nb_livraisons: number;
 }
 
 /** Transport conditions bloc */
@@ -761,34 +761,48 @@ async function queryTransport(
     }
   }
 
-  // Fetch shipping costs from CFACLIV over N and N-1 periods
+  // Fetch shipping costs from CLIVENT over N and N-1 periods
   const dateDebut = (referenceYear - 1) * 10000 + 101;
   const dateFin = referenceYear * 10000 + 1231;
 
-  const portFilter = adrnum !== undefined ? 'AND L.LIVADRNUM = ?' : '';
+  const portFilter = adrnum !== undefined ? 'AND LIVADRNUM = ?' : '';
   const portBinds = adrnum !== undefined ? [adrnum] : [];
 
   const portSql = `
     SELECT
-      E.FACDATE,
-      DOUBLE(COALESCE(L.FRAIPORT, 0)) AS FRAIPORT
-    FROM CFACLIV L
-    JOIN CFACENT E ON E.CDSOC = L.CDSOC AND E.FACNUMC = L.FACNUMC
-    WHERE E.CDSOC = ?
-      AND E.CDCLI = ?
-      AND E.FACDATE BETWEEN ? AND ?
+      EXPDATE,
+      DOUBLE(COALESCE(FRAIPORT, 0)) AS PORT_FACTURE,
+      (
+        DOUBLE(COALESCE(COUTPORT, 0)) +
+        DOUBLE(COALESCE(TAXEGAS, 0)) +
+        DOUBLE(COALESCE(TAXESUR, 0)) +
+        DOUBLE(COALESCE(TAXEIDF, 0)) +
+        DOUBLE(COALESCE(TAXEDIFF, 0)) +
+        DOUBLE(COALESCE(TAXEILE, 0)) +
+        DOUBLE(COALESCE(TAXEPAMS, 0)) +
+        DOUBLE(COALESCE(TAXEVL, 0)) +
+        DOUBLE(COALESCE(TAXEMANUT, 0)) +
+        DOUBLE(COALESCE(TAXEDEPOT, 0)) +
+        DOUBLE(COALESCE(TAXERDV, 0))
+      ) AS PORT_DEPENSE
+    FROM CLIVENT
+    WHERE CDSOC = ?
+      AND CDCLI = ?
+      AND EXPDATE BETWEEN ? AND ?
       ${portFilter}`;
 
   const portResult = await executeQuery(portSql, [cdsoc, cdcli, dateDebut, dateFin, ...portBinds], sessionId);
 
   interface PortAccum {
-    somme: number;
+    facture: number;
+    depense: number;
+    depenseMoyenneSomme: number;
     nbTotal: number;
-    nbAvecPort: number;
+    nbAvecDepensePort: number;
   }
-  const accumN: PortAccum = { somme: 0, nbTotal: 0, nbAvecPort: 0 };
-  const accumN1: PortAccum = { somme: 0, nbTotal: 0, nbAvecPort: 0 };
-  const accumN1Ytd: PortAccum = { somme: 0, nbTotal: 0, nbAvecPort: 0 };
+  const accumN: PortAccum = { facture: 0, depense: 0, depenseMoyenneSomme: 0, nbTotal: 0, nbAvecDepensePort: 0 };
+  const accumN1: PortAccum = { facture: 0, depense: 0, depenseMoyenneSomme: 0, nbTotal: 0, nbAvecDepensePort: 0 };
+  const accumN1Ytd: PortAccum = { facture: 0, depense: 0, depenseMoyenneSomme: 0, nbTotal: 0, nbAvecDepensePort: 0 };
 
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
@@ -796,40 +810,47 @@ async function queryTransport(
   const dateFinN1Ytd = (referenceYear - 1) * 10000 + currentMonth * 100 + lastDayN1;
 
   for (const row of portResult.rows) {
-    const facdate = Number(row.FACDATE ?? 0);
-    const port = Number(row.FRAIPORT ?? 0);
-    const year = Math.floor(facdate / 10000);
+    const expdate = Number(row.EXPDATE ?? 0);
+    const portFacture = Number(row.PORT_FACTURE ?? 0);
+    const portDepense = Number(row.PORT_DEPENSE ?? 0);
+    const year = Math.floor(expdate / 10000);
 
     if (year === referenceYear) {
       accumN.nbTotal += 1;
-      if (port > 0) {
-        accumN.somme += port;
-        accumN.nbAvecPort += 1;
+      accumN.facture += portFacture;
+      accumN.depense += portDepense;
+      if (portDepense > 0) {
+        accumN.depenseMoyenneSomme += portDepense;
+        accumN.nbAvecDepensePort += 1;
       }
     } else if (year === referenceYear - 1) {
       accumN1.nbTotal += 1;
-      if (port > 0) {
-        accumN1.somme += port;
-        accumN1.nbAvecPort += 1;
+      accumN1.facture += portFacture;
+      accumN1.depense += portDepense;
+      if (portDepense > 0) {
+        accumN1.depenseMoyenneSomme += portDepense;
+        accumN1.nbAvecDepensePort += 1;
       }
 
-      if (facdate <= dateFinN1Ytd) {
+      if (expdate <= dateFinN1Ytd) {
         accumN1Ytd.nbTotal += 1;
-        if (port > 0) {
-          accumN1Ytd.somme += port;
-          accumN1Ytd.nbAvecPort += 1;
+        accumN1Ytd.facture += portFacture;
+        accumN1Ytd.depense += portDepense;
+        if (portDepense > 0) {
+          accumN1Ytd.depenseMoyenneSomme += portDepense;
+          accumN1Ytd.nbAvecDepensePort += 1;
         }
       }
     }
   }
 
   const formatPort = (accum: PortAccum): Client360FraisPortMetrics => {
-    const moyen = accum.nbAvecPort > 0 ? accum.somme / accum.nbAvecPort : 0;
+    const moyen = accum.nbAvecDepensePort > 0 ? accum.depenseMoyenneSomme / accum.nbAvecDepensePort : 0;
     return {
-      total:                   Math.round(accum.somme * 100) / 100,
-      moyen:                   Math.round(moyen * 100) / 100,
-      nb_livraisons_facturees: accum.nbTotal,
-      nb_livraisons_avec_port: accum.nbAvecPort,
+      facture:        Math.round(accum.facture * 100) / 100,
+      depense:        Math.round(accum.depense * 100) / 100,
+      depense_moyen:  Math.round(moyen * 100) / 100,
+      nb_livraisons:  accum.nbTotal,
     };
   };
 

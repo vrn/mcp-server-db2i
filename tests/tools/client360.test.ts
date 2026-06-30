@@ -133,12 +133,12 @@ describe('getClient360Tool', () => {
         if (q.includes('FROM CLIRFA'))   return Promise.resolve(makeResult([{ RFATAUX: 0.5, RFAAA: 2025 }]));
         if (q.includes('FROM TOURNEL'))  return Promise.resolve(makeResult(tournelRow));
         if (q.includes('FROM CLILIV'))   return Promise.resolve(makeResult(cliliv));
-        if (q.includes('FROM CFACLIV')) {
+        if (q.includes('FROM CLIVENT')) {
           return Promise.resolve(makeResult([
-            { FACDATE: 20250615, FRAIPORT: 25.50 },
-            { FACDATE: 20250510, FRAIPORT: 0.0 }, // Franco
-            { FACDATE: 20240615, FRAIPORT: 35.00 },
-            { FACDATE: 20241015, FRAIPORT: 15.00 },
+            { EXPDATE: 20250615, PORT_FACTURE: 25.50, PORT_DEPENSE: 25.50 },
+            { EXPDATE: 20250510, PORT_FACTURE: 0.0,   PORT_DEPENSE: 0.00 }, // Franco
+            { EXPDATE: 20240615, PORT_FACTURE: 35.00, PORT_DEPENSE: 35.00 },
+            { EXPDATE: 20241015, PORT_FACTURE: 15.00, PORT_DEPENSE: 15.00 },
           ]));
         }
         return Promise.resolve(makeResult([]));
@@ -257,22 +257,22 @@ describe('getClient360Tool', () => {
 
       // Validation comparative port
       expect(result.transport.frais_port.annee_n).toEqual({
-        total: 25.5,
-        moyen: 25.5,
-        nb_livraisons_facturees: 2,
-        nb_livraisons_avec_port: 1,
+        facture: 25.5,
+        depense: 25.5,
+        depense_moyen: 25.5,
+        nb_livraisons: 2,
       });
       expect(result.transport.frais_port.annee_n1).toEqual({
-        total: 50.0,
-        moyen: 25.0,
-        nb_livraisons_facturees: 2,
-        nb_livraisons_avec_port: 2,
+        facture: 50.0,
+        depense: 50.0,
+        depense_moyen: 25.0,
+        nb_livraisons: 2,
       });
       expect(result.transport.frais_port.annee_n1_ytd).toEqual({
-        total: 35.0,
-        moyen: 35.0,
-        nb_livraisons_facturees: 1,
-        nb_livraisons_avec_port: 1,
+        facture: 35.0,
+        depense: 35.0,
+        depense_moyen: 35.0,
+        nb_livraisons: 1,
       });
     });
   });
@@ -287,7 +287,7 @@ describe('getClient360Tool', () => {
         if (q.includes('FROM CLIENTS'))  return Promise.resolve(makeResult([clientsRow]));
         if (q.includes('FROM TOURNEL'))  return Promise.resolve(makeResult(tournelRow));
         if (q.includes('FROM CLILIV'))   return Promise.resolve(makeResult([])); // adrnum=2 → no match
-        if (q.includes('FROM CFACLIV'))  return Promise.resolve(makeResult([]));
+        if (q.includes('FROM CLIVENT'))  return Promise.resolve(makeResult([]));
         return Promise.resolve(makeResult([{ CA_HT: 0, COUT_ACHAT_HT: 0, MARGE_HT: 0, TAUX_MARGE_PCT: null }]));
       });
 
