@@ -141,6 +141,12 @@ describe('getClient360Tool', () => {
             { EXPDATE: 20241015, PORT_FACTURE: 15.00, PORT_DEPENSE: 15.00 },
           ]));
         }
+        if (q.includes('FROM CCMDENT')) {
+          return Promise.resolve(makeResult([
+            { CMDNUMC: 999001, CMDDATE: 20250620, DMDDATE: 20250625, CMDREF: 'PO-1234', CMDETAT: 'E', MONTANT_HT: 1500.50 },
+            { CMDNUMC: 999002, CMDDATE: 20250622, DMDDATE: 20250628, CMDREF: 'PO-1235', CMDETAT: 'P', MONTANT_HT: 450.00 },
+          ]));
+        }
         return Promise.resolve(makeResult([]));
       });
     });
@@ -160,6 +166,31 @@ describe('getClient360Tool', () => {
       expect(result.top_articles).toBeDefined();
       expect(result.alertes).toBeDefined();
       expect(result.transport).toBeDefined();
+      expect(result.commandes_en_cours).toBeDefined();
+    });
+
+    it('maps commandes_en_cours correctly', async () => {
+      const result = await getClient360Tool({ cdsoc: '01', cdcli: 123, annee: 2025 });
+
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+
+      expect(result.commandes_en_cours).toHaveLength(2);
+      const cmd1 = result.commandes_en_cours[0];
+      expect(cmd1.cmdnumc).toBe(999001);
+      expect(cmd1.cmddate).toBe(20250620);
+      expect(cmd1.dmddate).toBe(20250625);
+      expect(cmd1.cmdref).toBe('PO-1234');
+      expect(cmd1.cmdetat).toBe('E');
+      expect(cmd1.montant_ht).toBe(1500.50);
+
+      const cmd2 = result.commandes_en_cours[1];
+      expect(cmd2.cmdnumc).toBe(999002);
+      expect(cmd2.cmddate).toBe(20250622);
+      expect(cmd2.dmddate).toBe(20250628);
+      expect(cmd2.cmdref).toBe('PO-1235');
+      expect(cmd2.cmdetat).toBe('P');
+      expect(cmd2.montant_ht).toBe(450.00);
     });
 
     it('maps identite correctly (trims whitespace)', async () => {
@@ -298,6 +329,7 @@ describe('getClient360Tool', () => {
         if (q.includes('FROM TOURNEL'))  return Promise.resolve(makeResult(tournelRow));
         if (q.includes('FROM CLILIV'))   return Promise.resolve(makeResult(multiCliliv));
         if (q.includes('FROM CLIVENT'))  return Promise.resolve(makeResult([]));
+        if (q.includes('FROM CCMDENT'))  return Promise.resolve(makeResult([]));
         return Promise.resolve(makeResult([]));
       });
 
@@ -328,6 +360,7 @@ describe('getClient360Tool', () => {
         if (q.includes('FROM TOURNEL'))  return Promise.resolve(makeResult(tournelRow));
         if (q.includes('FROM CLILIV'))   return Promise.resolve(makeResult([])); // adrnum=2 → no match
         if (q.includes('FROM CLIVENT'))  return Promise.resolve(makeResult([]));
+        if (q.includes('FROM CCMDENT'))  return Promise.resolve(makeResult([]));
         return Promise.resolve(makeResult([{ CA_HT: 0, COUT_ACHAT_HT: 0, MARGE_HT: 0, TAUX_MARGE_PCT: null }]));
       });
 

@@ -163,6 +163,16 @@ export interface Client360Transport {
   };
 }
 
+/** One open order in progress */
+export interface Client360CommandeEnCours {
+  cmdnumc: number;
+  cmddate: number;
+  dmddate: number;
+  cmdref: string;
+  cmdetat: string;
+  montant_ht: number;
+}
+
 /** Successful result */
 export interface Client360Success {
   success: true;
@@ -177,6 +187,7 @@ export interface Client360Success {
   top_articles: Client360TopArticle[];
   alertes: Client360Alertes;
   transport: Client360Transport;
+  commandes_en_cours: Client360CommandeEnCours[];
 }
 
 /** Tool result */
@@ -887,6 +898,50 @@ async function queryTransport(
   };
 }
 
+/**
+ * Fetches open orders (portefeuille) for the client from CCMDENT and CCMDLGN.
+ * Excludes sold orders (CMDETAT = 'S' and LGNETAT = 'S').
+ */
+async function queryCommandesEnCours(
+  cdsoc: string,
+  cdcli: number,
+  adrnum: number | undefined,
+  sessionId?: string
+): Promise<Client360CommandeEnCours[]> {
+  const adrnumFilter = adrnum !== undefined ? 'AND E.LIVADRNUM = ?' : '';
+  const binds = adrnum !== undefined ? [cdsoc, cdcli, adrnum] : [cdsoc, cdcli];
+
+  const sql = `
+    SELECT
+      E.CMDNUMC,
+      E.CMDDATE,
+      E.DMDDATE,
+      E.CMDREF,
+      E.CMDETAT,
+      SUM(DOUBLE(COALESCE(L.PVUNIHT, 0)) * DOUBLE(COALESCE(L.CMDQTE, 0)) * (1.0 - DOUBLE(COALESCE(L.PVREM, 0)) / 100.0)) AS MONTANT_HT
+    FROM CCMDENT E
+    JOIN CCMDLGN L ON L.CDSOC = E.CDSOC AND L.CMDNUMC = E.CMDNUMC
+    WHERE E.CDSOC = ?
+      AND E.CDCLI = ?
+      AND E.CMDETAT <> 'S'
+      AND L.LGNETAT <> 'S'
+      ${adrnumFilter}
+    GROUP BY E.CMDNUMC, E.CMDDATE, E.DMDDATE, E.CMDREF, E.CMDETAT
+    ORDER BY E.CMDDATE DESC
+  `;
+
+  const result = await executeQuery(sql, binds, sessionId);
+
+  return result.rows.map(row => ({
+    cmdnumc:    Number(row.CMDNUMC ?? 0),
+    cmddate:    Number(row.CMDDATE ?? 0),
+    dmddate:    Number(row.DMDDATE ?? 0),
+    cmdref:     String(row.CMDREF ?? '').trim(),
+    cmdetat:    String(row.CMDETAT ?? '').trim(),
+    montant_ht: Math.round(Number(row.MONTANT_HT ?? 0) * 100) / 100,
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // Main tool handler
 // ---------------------------------------------------------------------------
@@ -896,7 +951,7 @@ async function queryTransport(
  *
  * Orchestration:
  * 1. queryIdentite  — fetches CLIENTS row (mandatory gate)
- * 2. Promise.all — parallel: ca_n, ca_n1, tendance, top_articles, rfa
+ * 2. Promise.all — parallel: ca_n, ca_n1, tendance, top_articles, rfa, transport, commandes_en_cours
  *
  * @param input - cdsoc, cdcli, optional annee, adrnum, and sessionId
  */
@@ -929,15 +984,17 @@ export async function getClient360Tool(input: Client360Input): Promise<Client360
   let topArticles: Client360TopArticle[];
   let rfa: { rfa_taux: number | null; rfa_annee: number | null };
   let transport: Client360Transport;
+  let OpenOrders: Client360CommandeEnCours[];
 
   try {
-    [canN, canN1, tendance, topArticles, rfa, transport] = await Promise.all([
+    [canN, canN1, tendance, topArticles, rfa, transport, OpenOrders] = await Promise.all([
       queryCanYear(cdsoc, cdcli, annee,     sessionId),
       queryCanYear(cdsoc, cdcli, annee - 1, sessionId),
       queryTendanceMensuelle(cdsoc, cdcli, annee, adrnum, sessionId),
       queryTopArticles(cdsoc, cdcli, annee, adrnum, sessionId),
       queryRfa(cdsoc, cdcli, annee, sessionId),
       queryTransport(cdsoc, cdcli, clientRow.row, annee, adrnum, sessionId),
+      queryCommandesEnCours(cdsoc, cdcli, adrnum, sessionId),
     ]);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -961,5 +1018,6 @@ export async function getClient360Tool(input: Client360Input): Promise<Client360
     top_articles: topArticles,
     alertes,
     transport,
+    commandes_en_cours: OpenOrders,
   };
 }
