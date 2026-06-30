@@ -747,18 +747,32 @@ async function queryTransport(
   const adressesResult = await executeQuery(adressesSql, adressesBind, sessionId);
 
   const total_sites = adressesResult.rows.length;
-  const sites_par_departement: { [dept: string]: number } = {};
+  const tousDepartements: { [dept: string]: number } = {};
 
   for (const row of adressesResult.rows) {
     const cdpost = String(row.CDPOST ?? '').trim();
     if (cdpost) {
       const dept = cdpost.substring(0, 2);
       if (dept.match(/^\d{2}$/)) {
-        sites_par_departement[dept] = (sites_par_departement[dept] || 0) + 1;
+        tousDepartements[dept] = (tousDepartements[dept] || 0) + 1;
       } else {
-        sites_par_departement['Autre'] = (sites_par_departement['Autre'] || 0) + 1;
+        tousDepartements['Autre'] = (tousDepartements['Autre'] || 0) + 1;
       }
     }
+  }
+
+  // Keep only Top 10 departments and group the rest under "Autre dept"
+  const entries = Object.entries(tousDepartements).sort((a, b) => b[1] - a[1]);
+  const top10 = entries.slice(0, 10);
+  const remaining = entries.slice(10);
+
+  const sites_par_departement: { [dept: string]: number } = {};
+  for (const [dept, count] of top10) {
+    sites_par_departement[dept] = count;
+  }
+  if (remaining.length > 0) {
+    const remainingCount = remaining.reduce((acc, curr) => acc + curr[1], 0);
+    sites_par_departement['Autre dept'] = remainingCount;
   }
 
   // Fetch shipping costs from CLIVENT over N and N-1 periods

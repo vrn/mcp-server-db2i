@@ -275,6 +275,46 @@ describe('getClient360Tool', () => {
         nb_livraisons: 1,
       });
     });
+
+    it('groups departments and limits to Top 10 with Autre dept fallback', async () => {
+      const multiCliliv = [
+        { CDPOST: '75001' }, { CDPOST: '75002' }, { CDPOST: '75003' }, // 75: 3
+        { CDPOST: '92000' }, { CDPOST: '92100' },                    // 92: 2
+        { CDPOST: '93000' }, { CDPOST: '93100' },                    // 93: 2
+        { CDPOST: '94000' },                                         // 94: 1
+        { CDPOST: '69000' },                                         // 69: 1
+        { CDPOST: '13000' },                                         // 13: 1
+        { CDPOST: '33000' },                                         // 33: 1
+        { CDPOST: '31000' },                                         // 31: 1
+        { CDPOST: '44000' },                                         // 44: 1
+        { CDPOST: '59000' },                                         // 59: 1
+        { CDPOST: '21000' },                                         // 21: 1 -> should go to Autre dept
+        { CDPOST: '22000' },                                         // 22: 1 -> should go to Autre dept
+      ];
+
+      mockExecuteQuery.mockImplementation((sql: unknown) => {
+        const q = String(sql).replace(/\s+/g, ' ').toUpperCase();
+        if (q.includes('FROM CLIENTS'))  return Promise.resolve(makeResult([clientsRow]));
+        if (q.includes('FROM TOURNEL'))  return Promise.resolve(makeResult(tournelRow));
+        if (q.includes('FROM CLILIV'))   return Promise.resolve(makeResult(multiCliliv));
+        if (q.includes('FROM CLIVENT'))  return Promise.resolve(makeResult([]));
+        return Promise.resolve(makeResult([]));
+      });
+
+      const result = await getClient360Tool({ cdsoc: '01', cdcli: 123, annee: 2025 });
+
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+
+      expect(result.transport.total_sites).toBe(16);
+      
+      const keys = Object.keys(result.transport.sites_par_departement);
+      expect(keys).toHaveLength(11);
+      expect(result.transport.sites_par_departement['75']).toBe(3);
+      expect(result.transport.sites_par_departement['92']).toBe(2);
+      expect(result.transport.sites_par_departement['93']).toBe(2);
+      expect(result.transport.sites_par_departement['Autre dept']).toBe(2);
+    });
   });
 
   // ---- adrnum filter -------------------------------------------------------
