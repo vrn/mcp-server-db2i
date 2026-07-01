@@ -12,6 +12,7 @@ Welcome to the mcp-server-db2i documentation. This guide provides detailed infor
 | [Client Setup](client-setup.md) | Setup for Cursor, Claude Desktop, and Claude Code |
 | [Docker Guide](docker.md) | Container deployment with Docker and docker-compose |
 | [Development](development.md) | Contributing, testing, and local development setup |
+| [Rules for New Tools](rules_for_new_tools.md) | Coding standards, formatting guidelines, and database constraints |
 
 ## Overview
 
