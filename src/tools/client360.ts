@@ -62,6 +62,7 @@ export interface Client360Identite {
   cdgroupe: string;
   clistat: string;
   inactif: string;
+  tvacee: string;
 }
 
 /** CA + margin for one year */
@@ -225,6 +226,73 @@ const PARAM_JOIN = `LEFT JOIN PARAM P
 /** Raw row returned from CLIENTS */
 type ClientsRow = Record<string, unknown>;
 
+function formatPrenom(str: string): string {
+  return str.toLowerCase().replace(/(?:^|[- ])\p{L}/gu, match => match.toUpperCase());
+}
+
+function formatRepres(cdrep: string, pardata: string): string {
+  const code = cdrep.trim();
+  if (!code) return '';
+  const emailPart = pardata.substring(20).trim();
+  const emailMatch = emailPart.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/);
+  if (emailMatch) {
+    const email = emailMatch[1];
+    const localPart = email.split('@')[0];
+    const nameParts = localPart.split('.');
+    
+    let prenom = nameParts[0] || '';
+    prenom = formatPrenom(prenom);
+
+    const nom = (nameParts[1] || '').toUpperCase();
+
+    const formattedName = `${prenom} ${nom}`.trim();
+    return `${formattedName} (${code})`;
+  }
+  return code;
+}
+
+function formatSiren(siren: string): string {
+  const s = siren.replace(/\s+/g, '');
+  if (s.length === 9) {
+    return `${s.substring(0, 3)} ${s.substring(3, 6)} ${s.substring(6, 9)}`;
+  }
+  return siren;
+}
+
+function translateCountry(code: string): string {
+  const c = code.trim();
+  const dict: Record<string, string> = {
+    '001': 'France',
+    '094': 'Serbie',
+    '101': 'Danemark',
+    '102': 'Islande',
+    '103': 'Norvège',
+    '104': 'Suède',
+    '105': 'Finlande',
+    '106': 'Estonie',
+    '107': 'Lettonie',
+    '108': 'Lituanie',
+    '109': 'Allemagne',
+    '110': 'Autriche',
+    '111': 'Bulgarie',
+    '112': 'Hongrie',
+    '113': 'Liechtenstein',
+    '114': 'Roumanie',
+    '115': 'République Tchèque',
+    '116': 'Slovaquie',
+    '119': 'Croatie',
+    '150': 'Belgique',
+    '151': 'Luxembourg',
+    '152': 'Pays-Bas',
+    '153': 'Italie',
+    '154': 'Espagne',
+    '155': 'Portugal',
+    '156': 'Royaume-Uni',
+    '157': 'Suisse',
+  };
+  return dict[c] || c;
+}
+
 /**
  * Fetches client identity fields from CLIENTS.
  * Returns null if the client does not exist.
@@ -236,15 +304,27 @@ async function queryIdentite(
 ): Promise<{ row: ClientsRow } | null> {
   const sql = `
     SELECT
-      RAISON, ADRESS1, ADRESS2, ADRESS3, CDPOST, VILLE, CDPAYS,
-      SIREN, CDREP, CDCATCLI, CDGROUPE, CLISTAT, INACTIF,
-      ENCCPT, ENCTOT, CDSURV, BILBLOC,
-      CDTPORT, VFRANCO, CDTRNLIV, NOTRNLIV, LIVDAYS,
-      AMDTIMLIV, AMFTIMLIV, PMDTIMLIV, PMFTIMLIV,
-      LIVRVL, LIVRMANU, LIVRDEPO, LIVRRDV, LIVRPAMS,
-      ILIVRAIS, RLIVRAIS
-    FROM CLIENTS
-    WHERE CDSOC = ? AND CDCLI = ?
+      C.RAISON, C.ADRESS1, C.ADRESS2, C.ADRESS3, C.CDPOST, C.VILLE, C.CDPAYS,
+      C.SIREN, C.CDREP, C.CDCATCLI, C.CDGROUPE, C.CLISTAT, C.INACTIF, C.TVACEE,
+      C.ENCCPT, C.ENCTOT, C.CDSURV, C.BILBLOC,
+      C.CDTPORT, C.VFRANCO, C.CDTRNLIV, C.NOTRNLIV, C.LIVDAYS,
+      C.AMDTIMLIV, C.AMFTIMLIV, C.PMDTIMLIV, C.PMFTIMLIV,
+      C.LIVRVL, C.LIVRMANU, C.LIVRDEPO, C.LIVRRDV, C.LIVRPAMS,
+      C.ILIVRAIS, C.RLIVRAIS,
+      P_REP.PARDATA AS REP_PARDATA,
+      P_CAT.PARLIB  AS CAT_LIBELLE
+    FROM CLIENTS C
+    LEFT JOIN PARAM P_REP
+      ON  P_REP.CDSOC   = C.CDSOC
+      AND P_REP.MOTCLE  = 'REPRES'
+      AND P_REP.CDPARM1 = C.CDREP
+      AND P_REP.CDPARM2 = '          '
+    LEFT JOIN PARAM P_CAT
+      ON  P_CAT.CDSOC   = C.CDSOC
+      AND P_CAT.MOTCLE  = 'CATEG-CLI'
+      AND P_CAT.CDPARM1 = C.CDCATCLI
+      AND P_CAT.CDPARM2 = '          '
+    WHERE C.CDSOC = ? AND C.CDCLI = ?
     FETCH FIRST 1 ROW ONLY`;
   const result = await executeQuery(sql, [cdsoc, cdcli], sessionId);
   if (result.rows.length === 0) return null;
@@ -254,6 +334,19 @@ async function queryIdentite(
 /** Maps CLIENTS row to Client360Identite */
 function mapIdentite(row: ClientsRow): Client360Identite {
   const s = (f: string) => String(row[f] ?? '').trim();
+  
+  const rawSiren = s('SIREN');
+  const formattedSiren = formatSiren(rawSiren);
+  const country = translateCountry(s('CDPAYS'));
+
+  const rawRep = s('CDREP');
+  const repParData = s('REP_PARDATA');
+  const representative = formatRepres(rawRep, repParData);
+
+  const rawCat = s('CDCATCLI');
+  const catLibelle = s('CAT_LIBELLE');
+  const category = catLibelle ? `${rawCat} - ${catLibelle}` : rawCat;
+
   return {
     raison:    s('RAISON'),
     adress1:   s('ADRESS1'),
@@ -261,13 +354,14 @@ function mapIdentite(row: ClientsRow): Client360Identite {
     adress3:   s('ADRESS3'),
     cdpost:    s('CDPOST'),
     ville:     s('VILLE'),
-    cdpays:    s('CDPAYS'),
-    siren:     s('SIREN'),
-    cdrep:     s('CDREP'),
-    cdcatcli:  s('CDCATCLI'),
+    cdpays:    country,
+    siren:     formattedSiren,
+    cdrep:     representative,
+    cdcatcli:  category,
     cdgroupe:  s('CDGROUPE'),
     clistat:   s('CLISTAT'),
     inactif:   s('INACTIF'),
+    tvacee:    s('TVACEE'),
   };
 }
 
@@ -401,13 +495,29 @@ async function queryTendanceMensuelle(
   const months: Client360TrendMonth[] = result.rows.map(row => ({
     annee: Number(row.ANNEE ?? 0),
     mois:  Number(row.MOIS ?? 0),
-    ca_ht: Number(row.CA_HT ?? 0),
-    mb_ht: Number(row.MARGE_HT ?? 0),
+    ca_ht: Math.round(Number(row.CA_HT ?? 0) * 100) / 100,
+    mb_ht: Math.round(Number(row.MARGE_HT ?? 0) * 100) / 100,
   }));
 
   // Defensive sort, most-recent first
   months.sort((a, b) => b.annee - a.annee || b.mois - a.mois);
   return months;
+}
+
+function translateArtFam(code: string): string {
+  const c = code.toUpperCase().trim();
+  const dict: Record<string, string> = {
+    'ADH':   'Adhésifs',
+    'ADHD':  'Adhésifs double-face',
+    'ADHT':  'Adhésifs techniques',
+    'CD':    'Cartons et caisses',
+    'FITA':  'Film machine',
+    'FITE':  'Film étirable',
+    'FITES': 'Film manuel',
+    'PL':    'Palettes',
+    'COLLE': 'Colles',
+  };
+  return dict[c] || c;
 }
 
 // ---------------------------------------------------------------------------
@@ -575,8 +685,8 @@ async function queryTopArticles(
     if (!group) continue;
 
     if (!group.artlib) {
-      group.artlib = String(row.ARTLIB ?? '').trim();
-      group.artfam = String(row.ARTFAM ?? '').trim();
+      group.artlib = String(row.ARTLIB ?? '').replace(/\s+/g, ' ').trim();
+      group.artfam = translateArtFam(String(row.ARTFAM ?? '').trim());
     }
 
     const facdate = Number(row.FACDATE ?? 0);
@@ -695,13 +805,17 @@ function mapAlertes(
   rfa: { rfa_taux: number | null; rfa_annee: number | null }
 ): Client360Alertes {
   const cdsurv = String(clientsRow.CDSURV ?? '').trim();
+  const enctot = Math.round(Number(clientsRow.ENCTOT ?? 0) * 100) / 100;
+  const enccpt = Math.round(Number(clientsRow.ENCCPT ?? 0) * 100) / 100;
+  const rfaTaux = rfa.rfa_taux !== null ? Math.round(rfa.rfa_taux * 100) / 100 : null;
+
   return {
-    enctot:    Number(clientsRow.ENCTOT  ?? 0),
-    enccpt:    Number(clientsRow.ENCCPT  ?? 0),
+    enctot,
+    enccpt,
     cdsurv,
     lib_surv:  libSurv(cdsurv),
     bilbloc:   String(clientsRow.BILBLOC ?? '').trim(),
-    rfa_taux:  rfa.rfa_taux,
+    rfa_taux:  rfaTaux,
     rfa_annee: rfa.rfa_annee,
   };
 }
@@ -942,14 +1056,25 @@ async function queryCommandesEnCours(
 
   const result = await executeQuery(sql, binds, sessionId);
 
-  return result.rows.map(row => ({
-    cmdnumc:    Number(row.CMDNUMC ?? 0),
-    cmddate:    Number(row.CMDDATE ?? 0),
-    dmddate:    Number(row.DMDDATE ?? 0),
-    cmdref:     String(row.CMDREF ?? '').trim(),
-    cmdetat:    String(row.CMDETAT ?? '').trim(),
-    montant_ht: Math.round(Number(row.MONTANT_HT ?? 0) * 100) / 100,
-  }));
+  return result.rows.map(row => {
+    const rawEtat = String(row.CMDETAT ?? '').trim();
+    let stateLabel = rawEtat;
+    switch (rawEtat.toUpperCase()) {
+      case 'E': stateLabel = 'En cours'; break;
+      case 'P': stateLabel = 'En préparation'; break;
+      case 'S': stateLabel = 'Soldée'; break;
+      default:  stateLabel = rawEtat || 'Nouveau';
+    }
+
+    return {
+      cmdnumc:    Number(row.CMDNUMC ?? 0),
+      cmddate:    Number(row.CMDDATE ?? 0),
+      dmddate:    Number(row.DMDDATE ?? 0),
+      cmdref:     String(row.CMDREF ?? '').trim(),
+      cmdetat:    stateLabel,
+      montant_ht: Math.round(Number(row.MONTANT_HT ?? 0) * 100) / 100,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------

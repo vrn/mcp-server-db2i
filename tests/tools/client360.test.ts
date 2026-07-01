@@ -24,13 +24,16 @@ import { getClient360Tool } from '../../src/tools/client360.js';
 /** Minimal CLIENTS row fixture */
 const clientsRow: Record<string, unknown> = {
   RAISON: 'DUPONT SAS   ', ADRESS1: '12 RUE DE LA PAIX', ADRESS2: '', ADRESS3: '',
-  CDPOST: '75001', VILLE: 'PARIS', CDPAYS: 'FR', SIREN: '123456789',
-  CDREP: 'COM', CDCATCLI: 'GRD', CDGROUPE: 'GRPA', CLISTAT: 'ACT', INACTIF: ' ',
+  CDPOST: '75001', VILLE: 'PARIS', CDPAYS: '001', SIREN: '123456789',
+  CDREP: '46', CDCATCLI: 'UTIL', CDGROUPE: 'GRPA', CLISTAT: 'ACT', INACTIF: ' ',
   ENCCPT: 32000, ENCTOT: 45000, CDSURV: '1', BILBLOC: ' ',
   CDTPORT: 'F', VFRANCO: 500, CDTRNLIV: 'TOUR01', NOTRNLIV: 0,
   LIVDAYS: '1111100', AMDTIMLIV: 0, AMFTIMLIV: 0, PMDTIMLIV: 0, PMFTIMLIV: 0,
   LIVRVL: ' ', LIVRMANU: ' ', LIVRDEPO: ' ', LIVRRDV: ' ', LIVRPAMS: ' ',
   ILIVRAIS: 'Appeler avant livraison', RLIVRAIS: '',
+  TVACEE: 'FR12123456789',
+  REP_PARDATA: '06 62 91 51 19 17TOSjean-philippe.dupont@bbaemballages.com                     OO O   I  N',
+  CAT_LIBELLE: 'Utilisateur final',
 };
 
 
@@ -181,7 +184,7 @@ describe('getClient360Tool', () => {
       expect(cmd1.cmddate).toBe(20250620);
       expect(cmd1.dmddate).toBe(20250625);
       expect(cmd1.cmdref).toBe('PO-1234');
-      expect(cmd1.cmdetat).toBe('E');
+      expect(cmd1.cmdetat).toBe('En cours');
       expect(cmd1.montant_ht).toBe(1500.50);
 
       const cmd2 = result.commandes_en_cours[1];
@@ -189,7 +192,7 @@ describe('getClient360Tool', () => {
       expect(cmd2.cmddate).toBe(20250622);
       expect(cmd2.dmddate).toBe(20250628);
       expect(cmd2.cmdref).toBe('PO-1235');
-      expect(cmd2.cmdetat).toBe('P');
+      expect(cmd2.cmdetat).toBe('En préparation');
       expect(cmd2.montant_ht).toBe(450.00);
     });
 
@@ -199,7 +202,11 @@ describe('getClient360Tool', () => {
       expect(result.success).toBe(true);
       if (!result.success) return;
       expect(result.identite.raison).toBe('DUPONT SAS');
-      expect(result.identite.cdrep).toBe('COM');
+      expect(result.identite.cdrep).toBe('Jean-Philippe DUPONT (46)');
+      expect(result.identite.cdcatcli).toBe('UTIL - Utilisateur final');
+      expect(result.identite.cdpays).toBe('France');
+      expect(result.identite.siren).toBe('123 456 789');
+      expect(result.identite.tvacee).toBe('FR12123456789');
     });
 
     it('maps ca_n_n1 correctly', async () => {
