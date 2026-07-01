@@ -68,10 +68,10 @@ export interface Client360Identite {
 /** CA + margin for one year */
 export interface Client360CaYear {
   annee: number;
-  ca_ht: string;
-  cout_achat_ht: string;
-  marge_ht: string;
-  taux_marge_pct: string | null;
+  ca_ht: number;
+  cout_achat_ht: number;
+  marge_ht: number;
+  taux_marge_pct: number | null;
 }
 
 /** CA N / N-1 comparison bloc */
@@ -84,16 +84,16 @@ export interface Client360CaN1 {
 export interface Client360TrendMonth {
   annee: number;
   mois: number;
-  ca_ht: string;
-  mb_ht: string;
+  ca_ht: number;
+  mb_ht: number;
 }
 
 /** Metrics for a specific period of an article */
 export interface Client360TopArticleMetrics {
   qte_livree: number;
-  ca_ht: string;
-  mb_ht: string;
-  taux_marge_pct: string | null;
+  ca_ht: number;
+  mb_ht: number;
+  taux_marge_pct: number | null;
 }
 
 /** One article in the top-10 */
@@ -111,9 +111,9 @@ export interface Client360TopArticle {
 /** Alerts and risk indicators bloc */
 export interface Client360Alertes {
   /** Total outstanding balance HT */
-  enctot: string;
+  enctot: number;
   /** Accounting outstanding balance */
-  enccpt: string;
+  enccpt: number;
   /** Surveillance code: '1'=RAS '2'=A surveiller '3'=Bloqué '4'=Contentieux */
   cdsurv: string;
   /** Human-readable surveillance label */
@@ -121,16 +121,16 @@ export interface Client360Alertes {
   /** BIL block flag: 'B'=blocked */
   bilbloc: string;
   /** RFA rate for the reference year (null if none) */
-  rfa_taux: string | null;
+  rfa_taux: number | null;
   /** RFA year (null if none) */
   rfa_annee: number | null;
 }
 
 /** Metrics for shipping costs on a specific period */
 export interface Client360FraisPortMetrics {
-  facture: string;
-  depense: string;
-  depense_moyen: string;
+  facture: number;
+  depense: number;
+  depense_moyen: number;
   nb_livraisons: number;
 }
 
@@ -171,7 +171,7 @@ export interface Client360CommandeEnCours {
   dmddate: number;
   cmdref: string;
   cmdetat: string;
-  montant_ht: string;
+  montant_ht: number;
 }
 
 /** Successful result */
@@ -404,10 +404,10 @@ async function queryCanYear(
   const tx   = row.TAUX_MARGE_PCT != null ? Number(row.TAUX_MARGE_PCT) : null;
   return {
     annee,
-    ca_ht:         ca.toFixed(2),
-    cout_achat_ht: cout.toFixed(2),
-    marge_ht:      mb.toFixed(2),
-    taux_marge_pct: tx !== null ? tx.toFixed(2) : null,
+    ca_ht:         Math.round(ca * 100) / 100,
+    cout_achat_ht: Math.round(cout * 100) / 100,
+    marge_ht:      Math.round(mb * 100) / 100,
+    taux_marge_pct: tx !== null ? Math.round(tx * 100) / 100 : null,
   };
 }
 
@@ -501,8 +501,8 @@ async function queryTendanceMensuelle(
   const months: Client360TrendMonth[] = result.rows.map(row => ({
     annee: Number(row.ANNEE ?? 0),
     mois:  Number(row.MOIS ?? 0),
-    ca_ht: Number(row.CA_HT ?? 0).toFixed(2),
-    mb_ht: Number(row.MARGE_HT ?? 0).toFixed(2),
+    ca_ht: Math.round(Number(row.CA_HT ?? 0) * 100) / 100,
+    mb_ht: Math.round(Number(row.MARGE_HT ?? 0) * 100) / 100,
   }));
 
   // Defensive sort, most-recent first
@@ -741,14 +741,14 @@ async function queryTopArticles(
     const group = groups.get(cdart)!;
 
     const mapMetrics = (accum: PeriodAccum): Client360TopArticleMetrics => {
-      const txMargeVal = accum.ca === 0
+      const txMarge = accum.ca === 0
         ? null
-        : accum.mb / accum.ca * 100;
+        : Math.round(accum.mb / accum.ca * 10000) / 100;
       return {
         qte_livree:      Math.round(accum.qte * 100) / 100,
-        ca_ht:           accum.ca.toFixed(2),
-        mb_ht:           accum.mb.toFixed(2),
-        taux_marge_pct:  txMargeVal !== null ? txMargeVal.toFixed(2) : null,
+        ca_ht:           Math.round(accum.ca * 100) / 100,
+        mb_ht:           Math.round(accum.mb * 100) / 100,
+        taux_marge_pct:  txMarge,
       };
     };
 
@@ -811,9 +811,9 @@ function mapAlertes(
   rfa: { rfa_taux: number | null; rfa_annee: number | null }
 ): Client360Alertes {
   const cdsurv = String(clientsRow.CDSURV ?? '').trim();
-  const enctot = Number(clientsRow.ENCTOT ?? 0).toFixed(2);
-  const enccpt = Number(clientsRow.ENCCPT ?? 0).toFixed(2);
-  const rfaTaux = rfa.rfa_taux !== null ? Number(rfa.rfa_taux).toFixed(2) : null;
+  const enctot = Math.round(Number(clientsRow.ENCTOT ?? 0) * 100) / 100;
+  const enccpt = Math.round(Number(clientsRow.ENCCPT ?? 0) * 100) / 100;
+  const rfaTaux = rfa.rfa_taux !== null ? Math.round(rfa.rfa_taux * 100) / 100 : null;
 
   return {
     enctot,
@@ -992,9 +992,9 @@ async function queryTransport(
   const formatPort = (accum: PortAccum): Client360FraisPortMetrics => {
     const moyen = accum.nbAvecDepensePort > 0 ? accum.depenseMoyenneSomme / accum.nbAvecDepensePort : 0;
     return {
-      facture:        accum.facture.toFixed(2),
-      depense:        accum.depense.toFixed(2),
-      depense_moyen:  moyen.toFixed(2),
+      facture:        Math.round(accum.facture * 100) / 100,
+      depense:        Math.round(accum.depense * 100) / 100,
+      depense_moyen:  Math.round(moyen * 100) / 100,
       nb_livraisons:  accum.nbTotal,
     };
   };
@@ -1078,7 +1078,7 @@ async function queryCommandesEnCours(
       dmddate:    Number(row.DMDDATE ?? 0),
       cmdref:     String(row.CMDREF ?? '').trim(),
       cmdetat:    stateLabel,
-      montant_ht: Number(row.MONTANT_HT ?? 0).toFixed(2),
+      montant_ht: Math.round(Number(row.MONTANT_HT ?? 0) * 100) / 100,
     };
   });
 }

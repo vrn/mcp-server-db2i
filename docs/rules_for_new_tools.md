@@ -6,8 +6,8 @@ This document outlines the core coding standards, database mapping constraints, 
 
 ## 1. Financial Amounts & Percentages Formatting
 
-* **Requirement**: All monetary values (e.g., turnover, margins, outstanding balance, shipping costs, order amounts) and percentage metrics (e.g., margin rate, RFA rate) must be returned as **strings with exactly 2 decimal places** (e.g., `"1500.50"`, `"45.00"`).
-* **Rationale**: Standard JSON float/number serialization drops trailing non-significant zeros (converting `1500.50` to `1500.5` or `45.00` to `45`). Converting to string fields using `.toFixed(2)` ensures UI consistency.
+* **Requirement**: All monetary values (e.g., turnover, margins, outstanding balance, shipping costs, order amounts) and percentage metrics (e.g., margin rate, RFA rate) must be returned as **standard float numbers rounded to exactly 2 decimal places** (using `Math.round(val * 100) / 100`). They must not be returned as strings.
+* **Rationale**: Keeps values typed as native JSON numbers for flexibility in consumption, while ensuring mathematical precision is restricted to 2 decimal places.
 * **Exceptions**: Physical counts, delivery occurrences, or quantities (e.g., number of sites, delivery count) must remain as standard JS `number` types.
 
 ---

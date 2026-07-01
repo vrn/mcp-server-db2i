@@ -185,7 +185,7 @@ describe('getClient360Tool', () => {
       expect(cmd1.dmddate).toBe(20250625);
       expect(cmd1.cmdref).toBe('PO-1234');
       expect(cmd1.cmdetat).toBe('En cours');
-      expect(cmd1.montant_ht).toBe('1500.50');
+      expect(cmd1.montant_ht).toBe(1500.50);
 
       const cmd2 = result.commandes_en_cours[1];
       expect(cmd2.cmdnumc).toBe(999002);
@@ -193,7 +193,7 @@ describe('getClient360Tool', () => {
       expect(cmd2.dmddate).toBe(20250628);
       expect(cmd2.cmdref).toBe('PO-1235');
       expect(cmd2.cmdetat).toBe('En préparation');
-      expect(cmd2.montant_ht).toBe('450.00');
+      expect(cmd2.montant_ht).toBe(450.00);
     });
 
     it('maps identite correctly (trims whitespace)', async () => {
@@ -215,10 +215,10 @@ describe('getClient360Tool', () => {
       expect(result.success).toBe(true);
       if (!result.success) return;
       expect(result.ca_n_n1.annee_n.annee).toBe(2025);
-      expect(result.ca_n_n1.annee_n.ca_ht).toBe('145000.00');
-      expect(result.ca_n_n1.annee_n.marge_ht).toBe('38000.00');
+      expect(result.ca_n_n1.annee_n.ca_ht).toBe(145000);
+      expect(result.ca_n_n1.annee_n.marge_ht).toBe(38000);
       expect(result.ca_n_n1.annee_n1.annee).toBe(2024);
-      expect(result.ca_n_n1.annee_n1.ca_ht).toBe('132000.00');
+      expect(result.ca_n_n1.annee_n1.ca_ht).toBe(132000);
     });
 
     it('maps tendance_mensuelle sorted most-recent first', async () => {
@@ -245,28 +245,28 @@ describe('getClient360Tool', () => {
 
       // Année N YTD (2025) -> qte = 3000, ca = 11000, mb = 3500
       expect(art1.annee_n.qte_livree).toBe(3000);
-      expect(art1.annee_n.ca_ht).toBe('11000.00');
-      expect(art1.annee_n.mb_ht).toBe('3500.00');
+      expect(art1.annee_n.ca_ht).toBe(11000);
+      expect(art1.annee_n.mb_ht).toBe(3500);
 
       // Année N-1 Entière (2024) -> qte = 1000 + 1000 = 2000, ca = 4000 + 3000 = 7000, mb = 1500 + 1000 = 2500
       expect(art1.annee_n1.qte_livree).toBe(2000);
-      expect(art1.annee_n1.ca_ht).toBe('7000.00');
-      expect(art1.annee_n1.mb_ht).toBe('2500.00');
+      expect(art1.annee_n1.ca_ht).toBe(7000);
+      expect(art1.annee_n1.mb_ht).toBe(2500);
 
       // Année N-1 YTD (mois <= 6 de 2024) -> qte = 1000, ca = 4000, mb = 1500
       expect(art1.annee_n1_ytd.qte_livree).toBe(1000);
-      expect(art1.annee_n1_ytd.ca_ht).toBe('4000.00');
-      expect(art1.annee_n1_ytd.mb_ht).toBe('1500.00');
+      expect(art1.annee_n1_ytd.ca_ht).toBe(4000);
+      expect(art1.annee_n1_ytd.mb_ht).toBe(1500);
 
       // Année N-2 Entière (2023) -> qte = 800 + 200 = 1000, ca = 2400 + 600 = 3000, mb = 800 + 200 = 1000
       expect(art1.annee_n2.qte_livree).toBe(1000);
-      expect(art1.annee_n2.ca_ht).toBe('3000.00');
-      expect(art1.annee_n2.mb_ht).toBe('1000.00');
+      expect(art1.annee_n2.ca_ht).toBe(3000);
+      expect(art1.annee_n2.mb_ht).toBe(1000);
 
       // Année N-2 YTD (mois <= 6 de 2023) -> qte = 800, ca = 2400, mb = 800
       expect(art1.annee_n2_ytd.qte_livree).toBe(800);
-      expect(art1.annee_n2_ytd.ca_ht).toBe('2400.00');
-      expect(art1.annee_n2_ytd.mb_ht).toBe('800.00');
+      expect(art1.annee_n2_ytd.ca_ht).toBe(2400);
+      expect(art1.annee_n2_ytd.mb_ht).toBe(800);
     });
 
     it('maps alertes with enctot/enccpt from CLIENTS row and rfa_taux from CLIRFA', async () => {
@@ -274,10 +274,10 @@ describe('getClient360Tool', () => {
 
       expect(result.success).toBe(true);
       if (!result.success) return;
-      expect(result.alertes.enctot).toBe('45000.00');
-      expect(result.alertes.enccpt).toBe('32000.00');
+      expect(result.alertes.enctot).toBe(45000);
+      expect(result.alertes.enccpt).toBe(32000);
       // rfa_taux comes from CLIRFA row — RFATAUX field
-      expect(result.alertes.rfa_taux).toBe('0.50');
+      expect(result.alertes.rfa_taux).toBe(0.5);
       expect(result.alertes.rfa_annee).toBe(2025);
       expect(result.alertes.cdsurv).toBe('1');
       expect(result.alertes.lib_surv).toBe('RAS');
@@ -297,21 +297,21 @@ describe('getClient360Tool', () => {
 
       // Validation comparative port
       expect(result.transport.frais_port.annee_n).toEqual({
-        facture: "25.50",
-        depense: "25.50",
-        depense_moyen: "25.50",
+        facture: 25.5,
+        depense: 25.5,
+        depense_moyen: 25.5,
         nb_livraisons: 2,
       });
       expect(result.transport.frais_port.annee_n1).toEqual({
-        facture: "50.00",
-        depense: "50.00",
-        depense_moyen: "25.00",
+        facture: 50.0,
+        depense: 50.0,
+        depense_moyen: 25.0,
         nb_livraisons: 2,
       });
       expect(result.transport.frais_port.annee_n1_ytd).toEqual({
-        facture: "35.00",
-        depense: "35.00",
-        depense_moyen: "35.00",
+        facture: 35.0,
+        depense: 35.0,
+        depense_moyen: 35.0,
         nb_livraisons: 1,
       });
     });
