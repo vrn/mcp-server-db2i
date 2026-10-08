@@ -1,5 +1,113 @@
 # Changelog
 
+## [4.0.0](https://github.com/vrn/mcp-server-db2i/compare/v3.5.0...v4.0.0) (2026-10-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* the jt400 and mapepire drivers need their packages installed next to the server. With npx: `npx -y -p mcp-server-db2i -p node-jt400 mcp-server-db2i` (jt400) or `-p @ibm/mapepire-js -p ssh2` (mapepire). With npm: `npm install -g mcp-server-db2i node-jt400`.
+* migrate to MCP SDK v2 and default HTTP sessions to stateless ([#34](https://github.com/vrn/mcp-server-db2i/issues/34))
+* Initial public release of MCP server for IBM DB2 for i
+
+### Features
+
+* add a built-in OAuth 2.1 authorization server with IBM i sign-in ([#122](https://github.com/vrn/mcp-server-db2i/issues/122)) ([d960444](https://github.com/vrn/mcp-server-db2i/commit/d960444d0f33f8369fac922049894754dbe943c5))
+* add a driver interface and an IBM i Access ODBC backend ([#96](https://github.com/vrn/mcp-server-db2i/issues/96)) ([9c3e88a](https://github.com/vrn/mcp-server-db2i/commit/9c3e88a0e2c3c14944773614b416a0b68a0b714d)), closes [#57](https://github.com/vrn/mcp-server-db2i/issues/57)
+* add a Mapepire-over-SSH driver (DB2I_DRIVER=mapepire) ([#109](https://github.com/vrn/mcp-server-db2i/issues/109)) ([808c996](https://github.com/vrn/mcp-server-db2i/commit/808c9965ccdea144b5089e27093c9e2f948b649e))
+* add a validate-tools command for YAML tool files ([#67](https://github.com/vrn/mcp-server-db2i/issues/67)) ([8963230](https://github.com/vrn/mcp-server-db2i/commit/89632307e2c039fadcbcde9c1f99bf4a420e67d3))
+* add cause and recovery text to SQL errors ([#139](https://github.com/vrn/mcp-server-db2i/issues/139)) ([763cddc](https://github.com/vrn/mcp-server-db2i/commit/763cddc87543336ceebdbcaaf8f6870045bce93e)), closes [#116](https://github.com/vrn/mcp-server-db2i/issues/116)
+* add configurable query result size limits ([#15](https://github.com/vrn/mcp-server-db2i/issues/15)) ([0905b75](https://github.com/vrn/mcp-server-db2i/commit/0905b75afbc284fd0d0d806bb79478fccc9a16c9)), closes [#14](https://github.com/vrn/mcp-server-db2i/issues/14)
+* add Docker secrets support for secure credential management ([#10](https://github.com/vrn/mcp-server-db2i/issues/10)) ([8d40b2a](https://github.com/vrn/mcp-server-db2i/commit/8d40b2ad51efe956e260033fb29690112fd5a2a1)), closes [#9](https://github.com/vrn/mcp-server-db2i/issues/9)
+* add export_query to write query results to a CSV or XLSX file or download link ([#164](https://github.com/vrn/mcp-server-db2i/issues/164)) ([a907c69](https://github.com/vrn/mcp-server-db2i/commit/a907c69a166d23a1edf712c47eebc6f304c74c5c)), closes [#160](https://github.com/vrn/mcp-server-db2i/issues/160)
+* add get_journal_info and profile_table ([#76](https://github.com/vrn/mcp-server-db2i/issues/76)) ([0a5d694](https://github.com/vrn/mcp-server-db2i/commit/0a5d6945aa321d8a16ddc06aad966c91250b22cb)), closes [#74](https://github.com/vrn/mcp-server-db2i/issues/74) [#75](https://github.com/vrn/mcp-server-db2i/issues/75)
+* add hostname format validation ([#13](https://github.com/vrn/mcp-server-db2i/issues/13)) ([f6ac711](https://github.com/vrn/mcp-server-db2i/commit/f6ac711b6e457d3a3f5230aea40231a7aa898bed)), closes [#12](https://github.com/vrn/mcp-server-db2i/issues/12)
+* add HTTP transport with token authentication ([#19](https://github.com/vrn/mcp-server-db2i/issues/19)) ([19fb0c8](https://github.com/vrn/mcp-server-db2i/commit/19fb0c8de7e3482fe7d5ae3b3b8f5b1be9cb55d4))
+* add index_advice from the IBM i index advisor ([#142](https://github.com/vrn/mcp-server-db2i/issues/142)) ([6b31283](https://github.com/vrn/mcp-server-db2i/commit/6b3128355fc265659665297d8c1f6e0dfdc120ba))
+* add list_routines and describe_routine for procedures and functions ([#143](https://github.com/vrn/mcp-server-db2i/issues/143)) ([d4623c2](https://github.com/vrn/mcp-server-db2i/commit/d4623c260cd8083b2a7211814cef81bc75e3a5c1))
+* add optional intent, client, error category and sign-in events to the audit log ([#234](https://github.com/vrn/mcp-server-db2i/issues/234)) ([fa3ba9c](https://github.com/vrn/mcp-server-db2i/commit/fa3ba9c8d158b5703c124442a2d642a3f27da2d3))
+* add search_columns and search_tables ([4a819ca](https://github.com/vrn/mcp-server-db2i/commit/4a819cab459e621cf4f5a15a0992cc71675c127b))
+* add search_ibmi_services from the IBM i service catalog ([#132](https://github.com/vrn/mcp-server-db2i/issues/132)) ([384bbdc](https://github.com/vrn/mcp-server-db2i/commit/384bbdc8cfcecbb45e956a5479a03c5135d33822)), closes [#115](https://github.com/vrn/mcp-server-db2i/issues/115)
+* add testing, security validation, logging, and rate limiting ([#6](https://github.com/vrn/mcp-server-db2i/issues/6)) ([f0d08fc](https://github.com/vrn/mcp-server-db2i/commit/f0d08fc37768e29ca611bbc6ebbb381076dab27f))
+* apply QUERY_ALLOWED_SCHEMAS to the catalog browsing tools ([98383d5](https://github.com/vrn/mcp-server-db2i/commit/98383d54f4b6a92c6e8c000e56bf0428b7cdf994))
+* cancel long-running queries on IBM i with QUERY_TIMEOUT ([#130](https://github.com/vrn/mcp-server-db2i/issues/130)) ([f6fa8d3](https://github.com/vrn/mcp-server-db2i/commit/f6fa8d394c76c460b57ce33824c832e743c9857b))
+* configurable tool selection and compact response format ([#37](https://github.com/vrn/mcp-server-db2i/issues/37)) ([0597685](https://github.com/vrn/mcp-server-db2i/commit/05976859f731071fbb21e1c128a5272a7c062f33)), closes [#35](https://github.com/vrn/mcp-server-db2i/issues/35)
+* connect to multiple IBM i systems through profiles ([#98](https://github.com/vrn/mcp-server-db2i/issues/98)) ([cd910a4](https://github.com/vrn/mcp-server-db2i/commit/cd910a4de06a7553402b3ecd1496c9af4ef7a3f0))
+* enforce the schema allowlist from PARSE_STATEMENT names ([#260](https://github.com/vrn/mcp-server-db2i/issues/260)) ([a5f6380](https://github.com/vrn/mcp-server-db2i/commit/a5f6380274a3dc0e119a5b23e7a4c3ed57d3fd86)), closes [#256](https://github.com/vrn/mcp-server-db2i/issues/256)
+* expose MCP resources and prompts ([#80](https://github.com/vrn/mcp-server-db2i/issues/80)) ([98383d5](https://github.com/vrn/mcp-server-db2i/commit/98383d54f4b6a92c6e8c000e56bf0428b7cdf994))
+* hint to check columns with describe_table when Db2 reports an unknown column ([#248](https://github.com/vrn/mcp-server-db2i/issues/248)) ([64908b8](https://github.com/vrn/mcp-server-db2i/commit/64908b8097d4ce277939694c5a44b42184cdb20a)), closes [#247](https://github.com/vrn/mcp-server-db2i/issues/247)
+* **http:** close session pools that sit idle (MCP_POOL_IDLE_TIMEOUT) ([d69aa94](https://github.com/vrn/mcp-server-db2i/commit/d69aa9420c18fd0726b11cd25c5749a3d1df86fe))
+* initial release ([aa8ef0a](https://github.com/vrn/mcp-server-db2i/commit/aa8ef0a669343dcc92c688f29658104506b81953))
+* keep OAuth refresh grants across restarts ([#181](https://github.com/vrn/mcp-server-db2i/issues/181)) ([f80a55a](https://github.com/vrn/mcp-server-db2i/commit/f80a55a631268f2050d7f7ac5649c6243cc831b9))
+* let annotations declare row filters and warn when a query leaves them out ([#239](https://github.com/vrn/mcp-server-db2i/issues/239)) ([6fab2a3](https://github.com/vrn/mcp-server-db2i/commit/6fab2a31b16ada3e14eee7bebaa17cd1e74631f8)), closes [#236](https://github.com/vrn/mcp-server-db2i/issues/236)
+* let companies brand and translate the OAuth sign-in page ([#240](https://github.com/vrn/mcp-server-db2i/issues/240)) ([7571b7d](https://github.com/vrn/mcp-server-db2i/commit/7571b7dd1c83afe14d7ac820c3f732e043d678bb))
+* load read-only business SQL tools from YAML ([#47](https://github.com/vrn/mcp-server-db2i/issues/47)) ([690b985](https://github.com/vrn/mcp-server-db2i/commit/690b9858ff59d26e6d7dd1af1585e9f7aa064fe8))
+* make ODBC the default driver and JT400 optional ([#102](https://github.com/vrn/mcp-server-db2i/issues/102)) ([2447c4a](https://github.com/vrn/mcp-server-db2i/commit/2447c4a90e544da964a94bdc14bc5cc800f59603))
+* make the login and OAuth rate limits configurable ([#119](https://github.com/vrn/mcp-server-db2i/issues/119)) ([a6a63bd](https://github.com/vrn/mcp-server-db2i/commit/a6a63bde126ae5a7405a19f9746ba871e729caf4))
+* mask sensitive columns in query results ([#70](https://github.com/vrn/mcp-server-db2i/issues/70)) ([db0f800](https://github.com/vrn/mcp-server-db2i/commit/db0f800a089e7c2f0ebf4036fd1e29145873ff3d))
+* migrate to MCP SDK v2 and default HTTP sessions to stateless ([#34](https://github.com/vrn/mcp-server-db2i/issues/34)) ([bf37f26](https://github.com/vrn/mcp-server-db2i/commit/bf37f268b8c33c965922eefac388b62e906223af)), closes [#27](https://github.com/vrn/mcp-server-db2i/issues/27)
+* new visual identity for the site, sign-in page and docs ([#186](https://github.com/vrn/mcp-server-db2i/issues/186)) ([3defd62](https://github.com/vrn/mcp-server-db2i/commit/3defd620fd1d847ee460ac13c0dde1717c01deaa))
+* publish to the official MCP Registry ([#49](https://github.com/vrn/mcp-server-db2i/issues/49)) ([856db9d](https://github.com/vrn/mcp-server-db2i/commit/856db9ddec904fb0c89c86a7665691c928a5d316)), closes [#48](https://github.com/vrn/mcp-server-db2i/issues/48)
+* record each tool call in an audit log ([#69](https://github.com/vrn/mcp-server-db2i/issues/69)) ([8b18502](https://github.com/vrn/mcp-server-db2i/commit/8b1850284ceaf850587e1cfab75e1b9bf818ba68))
+* record the server version and build in the audit log ([#266](https://github.com/vrn/mcp-server-db2i/issues/266)) ([8773a42](https://github.com/vrn/mcp-server-db2i/commit/8773a42c0fc65cdf54d8afef81cc3b8f61781e7e)), closes [#265](https://github.com/vrn/mcp-server-db2i/issues/265)
+* record which check rejected a statement, and validate_query's verdict, in the audit log ([#264](https://github.com/vrn/mcp-server-db2i/issues/264)) ([64d51e5](https://github.com/vrn/mcp-server-db2i/commit/64d51e5d88a9648b1a09800a94ee2626d49eefe4)), closes [#257](https://github.com/vrn/mcp-server-db2i/issues/257)
+* reload YAML tools when their files change ([#68](https://github.com/vrn/mcp-server-db2i/issues/68)) ([affa527](https://github.com/vrn/mcp-server-db2i/commit/affa5274ba9c9029d1bfd6978b7de3a068a28031))
+* require Node 22 and node-jt400 7 ([#53](https://github.com/vrn/mcp-server-db2i/issues/53)) ([2afc062](https://github.com/vrn/mcp-server-db2i/commit/2afc0629c3a0062c13ba257f8d377e9d39666150))
+* return Db2's reason when the parse check cannot parse a statement ([#262](https://github.com/vrn/mcp-server-db2i/issues/262)) ([1c4db07](https://github.com/vrn/mcp-server-db2i/commit/1c4db076260042e009e83adff11ba0c6fc571593)), closes [#140](https://github.com/vrn/mcp-server-db2i/issues/140)
+* say when query results stop at the row limit ([#238](https://github.com/vrn/mcp-server-db2i/issues/238)) ([9756058](https://github.com/vrn/mcp-server-db2i/commit/9756058499e5ad06e6f614bc990461e5e7668740)), closes [#237](https://github.com/vrn/mcp-server-db2i/issues/237)
+* send server instructions built from custom tool files ([#228](https://github.com/vrn/mcp-server-db2i/issues/228)) ([601f75e](https://github.com/vrn/mcp-server-db2i/commit/601f75ea88b5b53b13b3b592591efe4b91b17398))
+* show setup help on first run and add --help and --version ([#201](https://github.com/vrn/mcp-server-db2i/issues/201)) ([d244c76](https://github.com/vrn/mcp-server-db2i/commit/d244c769fa620c16d346de7051df4e204e4a63a5))
+* stop installing node-jt400 and the mapepire packages by default ([#203](https://github.com/vrn/mcp-server-db2i/issues/203)) ([17d4497](https://github.com/vrn/mcp-server-db2i/commit/17d4497e17b559a6d2f0ed0d368900338f5b3018))
+* suggest entity names when get_business_context matches nothing ([#246](https://github.com/vrn/mcp-server-db2i/issues/246)) ([ee49618](https://github.com/vrn/mcp-server-db2i/commit/ee4961899394155ad0441af9ce093d02146628de)), closes [#245](https://github.com/vrn/mcp-server-db2i/issues/245)
+* use DB2I_SCHEMA as the default library and add a schema allowlist ([#39](https://github.com/vrn/mcp-server-db2i/issues/39)) ([c4e9787](https://github.com/vrn/mcp-server-db2i/commit/c4e9787fbcf3d40abafcc3e63cbb2329f8627b13)), closes [#36](https://github.com/vrn/mcp-server-db2i/issues/36)
+* validate SQL and return object DDL and dependents ([#44](https://github.com/vrn/mcp-server-db2i/issues/44)) ([932a6a8](https://github.com/vrn/mcp-server-db2i/commit/932a6a839031635068ffa57c9e3a889672e71258))
+
+
+### Bug Fixes
+
+* accept aliased special registers in the schema allowlist check ([#184](https://github.com/vrn/mcp-server-db2i/issues/184)) ([77018fe](https://github.com/vrn/mcp-server-db2i/commit/77018fe761e4017ee7ae84d60b458c4ed89865c8)), closes [#183](https://github.com/vrn/mcp-server-db2i/issues/183)
+* accept Db2 for i cast syntax in the schema allowlist check ([#177](https://github.com/vrn/mcp-server-db2i/issues/177)) ([b1bf1e9](https://github.com/vrn/mcp-server-db2i/commit/b1bf1e91f9359cd29afe75ed9b8db32d80cd6352))
+* add Docker secrets configuration to docker-compose.yml ([886d2bc](https://github.com/vrn/mcp-server-db2i/commit/886d2bcd481d58ad0e61f9809f8f102110150cca))
+* add node_modules/.bin to PATH in Docker builder stage ([994eff5](https://github.com/vrn/mcp-server-db2i/commit/994eff51ba0258803b66c644357e5c032c2388d7))
+* add the row limit before FOR READ ONLY and other trailing clauses ([#263](https://github.com/vrn/mcp-server-db2i/issues/263)) ([8225685](https://github.com/vrn/mcp-server-db2i/commit/82256852aa92acdc3322e45b09cfc5af26d07402)), closes [#258](https://github.com/vrn/mcp-server-db2i/issues/258)
+* check schema-qualified function calls against the schema allowlist ([#145](https://github.com/vrn/mcp-server-db2i/issues/145)) ([480c8a5](https://github.com/vrn/mcp-server-db2i/commit/480c8a52624897fff94e436c5d22756003a4a2ea)), closes [#144](https://github.com/vrn/mcp-server-db2i/issues/144)
+* close read-only SQL and HTTP exposure gaps ([1c75a21](https://github.com/vrn/mcp-server-db2i/commit/1c75a218fa4841ace3b5cb60596a7fe5eda3f083)), closes [#40](https://github.com/vrn/mcp-server-db2i/issues/40)
+* count /auth attempts on arrival and drop CORS credentials ([#94](https://github.com/vrn/mcp-server-db2i/issues/94)) ([046f1e5](https://github.com/vrn/mcp-server-db2i/commit/046f1e512d7d8c8bd36c9fd3d27c2059f2c80467)), closes [#93](https://github.com/vrn/mcp-server-db2i/issues/93)
+* exit stdio servers when their client goes away ([#126](https://github.com/vrn/mcp-server-db2i/issues/126)) ([1e6b6ed](https://github.com/vrn/mcp-server-db2i/commit/1e6b6edd2f1902e6d3bde2cc8c65031a0eafa931)), closes [#123](https://github.com/vrn/mcp-server-db2i/issues/123)
+* harden HTTP transport, clamp query limits, and bump MCP SDK to 1.30 ([89248c2](https://github.com/vrn/mcp-server-db2i/commit/89248c2046b3de406cd009400c5a8b1f9bbacd87))
+* harden HTTP transport, clamp query limits, and bump MCP SDK to 1.30 ([13ca726](https://github.com/vrn/mcp-server-db2i/commit/13ca726019d66e1d5969ee61565447d3313c9abc)), closes [#26](https://github.com/vrn/mcp-server-db2i/issues/26)
+* housekeeping pass after connection profiles and the ODBC driver ([#99](https://github.com/vrn/mcp-server-db2i/issues/99)) ([4182a50](https://github.com/vrn/mcp-server-db2i/commit/4182a506f3dfdd04ee5ff68315f7f7ecb1a7ea05))
+* **http:** keep one pool per OAuth sign-in across token refreshes ([#217](https://github.com/vrn/mcp-server-db2i/issues/217)) ([4a9baf9](https://github.com/vrn/mcp-server-db2i/commit/4a9baf9e4faca1dd3ecba73c0253f59a525ccbee))
+* let a variable sign-in page font render medium weight ([#242](https://github.com/vrn/mcp-server-db2i/issues/242)) ([6c97ad6](https://github.com/vrn/mcp-server-db2i/commit/6c97ad6a8119f02e8e329ce47517c40e62a60909))
+* match the sign-in page to the README and docs branding ([#146](https://github.com/vrn/mcp-server-db2i/issues/146)) ([40c76c9](https://github.com/vrn/mcp-server-db2i/commit/40c76c9dab135f2d8ac09d3f002f760d2c893109))
+* match writes by shape so the SQL validator accepts Db2 for i functions and names ([#259](https://github.com/vrn/mcp-server-db2i/issues/259)) ([7fd5b52](https://github.com/vrn/mcp-server-db2i/commit/7fd5b52b0de75d51ac9836bc22a777d012f40c80)), closes [#255](https://github.com/vrn/mcp-server-db2i/issues/255)
+* name every parser's failure when the schema allowlist cannot parse a query ([#244](https://github.com/vrn/mcp-server-db2i/issues/244)) ([b9f5662](https://github.com/vrn/mcp-server-db2i/commit/b9f5662390f42f5b649d49aff55501f11e526be9))
+* **oauth:** do not undo a revocation that lands during a token refresh ([#218](https://github.com/vrn/mcp-server-db2i/issues/218)) ([f44a092](https://github.com/vrn/mcp-server-db2i/commit/f44a0925dd2bb19304265d3a7069e5b9e0e7113e))
+* point npx instructions at mcp-server-db2i@latest ([#205](https://github.com/vrn/mcp-server-db2i/issues/205)) ([fdc00be](https://github.com/vrn/mcp-server-db2i/commit/fdc00befec591e8162f27c4b99d3db60dd554676))
+* read ODBC text as UTF-8 so non-ASCII characters are not lost ([#169](https://github.com/vrn/mcp-server-db2i/issues/169)) ([aa9818f](https://github.com/vrn/mcp-server-db2i/commit/aa9818fb60abfff97ea5b3d461df75e0134e1763))
+* report a missing library from get_journal_info ([#78](https://github.com/vrn/mcp-server-db2i/issues/78)) ([27af26f](https://github.com/vrn/mcp-server-db2i/commit/27af26f4fc338eb46536f6e09dea096baf4f5c91))
+* return BIGINT values from the ODBC driver ([#128](https://github.com/vrn/mcp-server-db2i/issues/128)) ([3cc0053](https://github.com/vrn/mcp-server-db2i/commit/3cc0053d228356cabc4bd6d8d907e6e9b7cce9c9)), closes [#127](https://github.com/vrn/mcp-server-db2i/issues/127)
+* return BLOB columns as hex on the jt400 driver ([#175](https://github.com/vrn/mcp-server-db2i/issues/175)) ([89cc133](https://github.com/vrn/mcp-server-db2i/commit/89cc13338b994221bfa3c0bc4f70025711ba82f0)), closes [#166](https://github.com/vrn/mcp-server-db2i/issues/166)
+* return hosted OAuth clients to their callback from a page, not a form redirect ([#209](https://github.com/vrn/mcp-server-db2i/issues/209)) ([4976dac](https://github.com/vrn/mcp-server-db2i/commit/4976dac6bcb17254191c6142ec97b3acc5b25d5c))
+* return ODBC binary columns as hex and warn about rounded decimals ([#165](https://github.com/vrn/mcp-server-db2i/issues/165)) ([0511de7](https://github.com/vrn/mcp-server-db2i/commit/0511de7ef3b6e3641f7bd9ea4f2c98ef42a04179)), closes [#163](https://github.com/vrn/mcp-server-db2i/issues/163)
+* shorten server.json description to the registry limit ([#107](https://github.com/vrn/mcp-server-db2i/issues/107)) ([f3d8676](https://github.com/vrn/mcp-server-db2i/commit/f3d8676649d5b73f028b11f3f58e62eb8c875163))
+
+
+### Dependencies
+
+* bump hono from 4.13.8 to 4.13.9 in the production group ([#224](https://github.com/vrn/mcp-server-db2i/issues/224)) ([15f6f32](https://github.com/vrn/mcp-server-db2i/commit/15f6f32515e1fa50b65f980b1c325d1f9bba4397))
+
+
+### CI/CD
+
+* publish npm via OIDC and allow republishing v1.3.2 ([e706589](https://github.com/vrn/mcp-server-db2i/commit/e706589e3b7932c9367906d7a1bb1a5b601e3e2d))
+* publish npm via OIDC trusted publishing and allow tag retries ([1eb2362](https://github.com/vrn/mcp-server-db2i/commit/1eb2362adddba54119f82c2c96595af969a33f1c))
+* retry MCP Registry publish until npm shows the version ([#55](https://github.com/vrn/mcp-server-db2i/issues/55)) ([598b708](https://github.com/vrn/mcp-server-db2i/commit/598b7080cc1cdbd5533912c370d8f72652bb1f70))
+* run CI in the release workflow only before a publish ([#100](https://github.com/vrn/mcp-server-db2i/issues/100)) ([57850bb](https://github.com/vrn/mcp-server-db2i/commit/57850bbdfa23f21e3cde903ed416b029b2cce381))
+* run publish tests on Node 20, publish with Node 24 ([4c34d99](https://github.com/vrn/mcp-server-db2i/commit/4c34d99583f181e7e5b72d28116af3e34fe42cfd))
+* run publish-job tests on Node 20 and publish with Node 24 ([b576466](https://github.com/vrn/mcp-server-db2i/commit/b57646667f125902fe31039abc294705e1f9aaa8))
+* stop duplicate changelog rows and dedupe the release pipeline ([#32](https://github.com/vrn/mcp-server-db2i/issues/32)) ([5361afa](https://github.com/vrn/mcp-server-db2i/commit/5361afab8a589dd90ff39acf7a9f8b215dfb097c))
+* wait up to 10 minutes for npm before registry publish ([#72](https://github.com/vrn/mcp-server-db2i/issues/72)) ([17164e7](https://github.com/vrn/mcp-server-db2i/commit/17164e7e395608b2ce5a7b05ca528d01e9edb369))
+
 ## [3.5.0](https://github.com/Strom-Capital/mcp-server-db2i/compare/v3.4.0...v3.5.0) (2026-10-01)
 
 
