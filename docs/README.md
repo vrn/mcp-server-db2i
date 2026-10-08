@@ -13,6 +13,7 @@ These guides cover configuring, deploying, and developing with mcp-server-db2i, 
 | [Docker Guide](docker.md) | Container deployment with Docker and docker-compose |
 | [Security](security.md) | Credentials management, rate limiting, and query validation |
 | [Development](development.md) | Contributing, testing, and local development setup |
+| [Rules for New Tools](rules_for_new_tools.md) | Coding standards, formatting guidelines, and database constraints |
 
 For an overview, the architecture, and compatibility, see the [project README](../README.md).
 
