@@ -1013,6 +1013,9 @@ export const TOOL_NAMES = [
   'profile_table',
   'get_business_context',
   'search_ibmi_services',
+  'calculate_ca_marge',
+  'get_client_360',
+  'get_fournisseur_360',
 ] as const;
 
 /**

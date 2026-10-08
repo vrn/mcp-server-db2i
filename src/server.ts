@@ -41,6 +41,9 @@ import {
 import { indexAdviceTool } from './tools/indexAdvice.js';
 import { describeRoutineTool, listRoutinesTool } from './tools/routines.js';
 import { profileTableTool } from './tools/profile.js';
+import { calculateCaMarginTool } from './tools/caMargin.js';
+import { getClient360Tool } from './tools/client360.js';
+import { getFournisseur360Tool } from './tools/fournisseur360.js';
 import { getBusinessContextTool } from './customTools/context.js';
 import { bindCustomToolArgs, executeCustomTool } from './customTools/execute.js';
 import { getCustomTools, type StoredTool } from './customTools/registry.js';
@@ -529,6 +532,48 @@ const businessContextOutputSchema = z.object({
   available_entities: z.array(z.string()).optional().describe('Every loaded entity name, when nothing matched the filters'),
   available_tables: z.array(z.string()).optional().describe('Every annotated SCHEMA.TABLE, when the table filter matched nothing'),
   hint: z.string().optional().describe('What to call next when the filters did not match exactly'),
+});
+
+const calculateCaMarginOutputSchema = z.object({
+  success: z.boolean(),
+  error: z.string().optional(),
+  axis: z.string().optional(),
+  date_debut: z.string().optional(),
+  date_fin: z.string().optional(),
+  row_count: z.number().int().optional(),
+  rows: z.array(z.record(z.string(), z.unknown())).optional(),
+  totals: z.record(z.string(), z.unknown()).optional(),
+});
+
+const client360OutputSchema = z.object({
+  success: z.boolean(),
+  error: z.string().optional(),
+  cdsoc: z.string().optional(),
+  cdcli: z.number().int().optional(),
+  annee: z.number().int().optional(),
+  adrnum: z.number().int().nullable().optional(),
+  identite: z.record(z.string(), z.unknown()).optional(),
+  ca_n_n1: z.record(z.string(), z.unknown()).optional(),
+  tendance_mensuelle: z.array(z.record(z.string(), z.unknown())).optional(),
+  top_articles: z.array(z.record(z.string(), z.unknown())).optional(),
+  alertes: z.record(z.string(), z.unknown()).optional(),
+  transport: z.record(z.string(), z.unknown()).optional(),
+  commandes_en_cours: z.record(z.string(), z.unknown()).optional(),
+});
+
+const fournisseur360OutputSchema = z.object({
+  success: z.boolean(),
+  error: z.string().optional(),
+  cdsoc: z.string().optional(),
+  cdfou: z.number().int().optional(),
+  annee: z.number().int().optional(),
+  cdagel: z.string().nullable().optional(),
+  identite: z.record(z.string(), z.unknown()).optional(),
+  achats_n_n1: z.record(z.string(), z.unknown()).optional(),
+  tendance_mensuelle: z.array(z.record(z.string(), z.unknown())).optional(),
+  top_articles: z.array(z.record(z.string(), z.unknown())).optional(),
+  alertes: z.record(z.string(), z.unknown()).optional(),
+  transport: z.record(z.string(), z.unknown()).optional(),
 });
 
 const tableConstraintsOutputSchema = z.object({
@@ -1486,6 +1531,174 @@ export function createServer(sessionContext?: SessionContext): McpServer {
         'Failed to read business context',
         sessionContext,
         argsAudit('get_business_context'),
+      )
+    );
+  }
+
+  if (enabledTools.has('calculate_ca_marge')) {
+    server.registerTool(
+      'calculate_ca_marge',
+      {
+        title: 'Calculate CA & Gross Margin',
+        description:
+          'Calcule le chiffre d\'affaires HT et la marge brute sur les factures clients ' +
+          'des sociétés du groupe TINI (IBM i / DB2 for i). ' +
+          'Trois axes disponibles : par société (society), par client (client), par article (article). ' +
+          'Filtre obligatoire : date_debut et date_fin au format YYYYMMDD. ' +
+          'Retourne CA HT, coût d\'achat, marge brute, taux de marge et totaux agrégés.',
+        annotations: READ_ONLY_ANNOTATIONS,
+        inputSchema: z.object({
+          ...common,
+          axis: z
+            .enum(['society', 'client', 'article'])
+            .describe('Axe d\'agrégation : society | client | article'),
+          date_debut: z
+            .string()
+            .regex(/^\d{8}$/, 'Format YYYYMMDD requis')
+            .describe('Date de début de période au format YYYYMMDD (ex: 20260101)'),
+          date_fin: z
+            .string()
+            .regex(/^\d{8}$/, 'Format YYYYMMDD requis')
+            .describe('Date de fin de période au format YYYYMMDD (ex: 20261231)'),
+          cdsoc: z
+            .union([z.string(), z.array(z.string())])
+            .optional()
+            .describe('Code(s) société. Défaut : toutes les sociétés du groupe TINI'),
+          cdcli: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe('Filtre sur un client spécifique (utile avec axis=client)'),
+          cdart: z
+            .string()
+            .max(10)
+            .optional()
+            .describe('Filtre sur un article spécifique (utile avec axis=article)'),
+          limit: z
+            .number()
+            .int()
+            .min(1)
+            .max(1000)
+            .optional()
+            .default(100)
+            .describe('Nombre maximum de lignes retournées (défaut: 100, max: 1000)'),
+          order_by: z
+            .enum(['ca', 'marge', 'taux_marge'])
+            .optional()
+            .default('ca')
+            .describe('Tri du résultat : ca | marge | taux_marge (défaut: ca)'),
+        }),
+        outputSchema: calculateCaMarginOutputSchema,
+      },
+      withToolHandler(
+        (args, target) => calculateCaMarginTool({ ...args, target }),
+        'Calcul CA/marge échoué',
+        sessionContext,
+        argsAudit('calculate_ca_marge'),
+      )
+    );
+  }
+
+  if (enabledTools.has('get_client_360')) {
+    server.registerTool(
+      'get_client_360',
+      {
+        title: 'Fiche client 360°',
+        description:
+          'Retourne une fiche complète à 360° pour un client du groupe TINI (IBM i / DB2 for i). ' +
+          'Contient 5 blocs : identité (raison sociale, adresse, représentant, catégorie), ' +
+          'CA HT + marge brute N et N-1 calculés depuis les factures (CFACENT/CFACLGN), ' +
+          'tendance mensuelle sur 24 mois depuis CRMCAHT (pré-agrégé), ' +
+          'top 10 articles par CA depuis CRMCONSO, ' +
+          'alertes (encours HT/comptable, code surveillance, blocage BIL, taux RFA).',
+        annotations: READ_ONLY_ANNOTATIONS,
+        inputSchema: z.object({
+          ...common,
+          cdsoc: z
+            .string()
+            .length(2)
+            .describe('Code société (2 caractères, ex: "01")'),
+          cdcli: z
+            .number()
+            .int()
+            .positive()
+            .describe('Code client (entier positif)'),
+          annee: z
+            .number()
+            .int()
+            .min(2000)
+            .max(2099)
+            .optional()
+            .describe('Année de référence pour les calculs N/N-1 (défaut: année courante)'),
+          adrnum: z
+            .number()
+            .int()
+            .min(0)
+            .optional()
+            .describe(
+              'N° adresse de livraison — filtre CRMCAHT et CRMCONSO sur une agence précise du client. ' +
+              'Sans ce paramètre, toutes les adresses sont agrégées (vue globale client).'
+            ),
+        }),
+        outputSchema: client360OutputSchema,
+      },
+      withToolHandler(
+        (args, target) => getClient360Tool({ ...args, target }) as Promise<ToolResult>,
+        'Fiche client 360° échouée',
+        sessionContext,
+        argsAudit('get_client_360'),
+      )
+    );
+  }
+
+  if (enabledTools.has('get_fournisseur_360')) {
+    server.registerTool(
+      'get_fournisseur_360',
+      {
+        title: 'Fiche fournisseur 360°',
+        description:
+          'Retourne une fiche complète à 360° pour un fournisseur du groupe TINI (IBM i / DB2 for i). ' +
+          'Contient 5 blocs : identité (raison sociale, adresse, délai livraison, blocage), ' +
+          'achats HT N et N-1 calculés depuis les BL fournisseur (FLIVENT/FLIVLGN), ' +
+          'tendance mensuelle sur 24 mois glissants (calculée, pas pré-agrégée), ' +
+          'top 10 articles par montant achat HT sur l\'année N, ' +
+          'alertes (blocage fournisseur, taux RFA, montant RFA obtenu, seuil RFA).',
+        annotations: READ_ONLY_ANNOTATIONS,
+        inputSchema: z.object({
+          ...common,
+          cdsoc: z
+            .string()
+            .length(2)
+            .describe('Code société (2 caractères, ex: "01")'),
+          cdfou: z
+            .number()
+            .int()
+            .positive()
+            .describe('Code fournisseur (entier positif)'),
+          annee: z
+            .number()
+            .int()
+            .min(2000)
+            .max(2099)
+            .optional()
+            .describe('Année de référence pour les calculs N/N-1 (défaut: année courante)'),
+          cdagel: z
+            .string()
+            .length(2)
+            .optional()
+            .describe(
+              'Code agence réceptrice (FLIVENT.CDAGEL, 2 caractères) — filtre tous les blocs achat ' +
+              'sur cette agence. Sans ce paramètre, toutes les agences sont agrégées (vue globale fournisseur).'
+            ),
+        }),
+        outputSchema: fournisseur360OutputSchema,
+      },
+      withToolHandler(
+        (args, target) => getFournisseur360Tool({ ...args, target }) as Promise<ToolResult>,
+        'Fiche fournisseur 360° échouée',
+        sessionContext,
+        argsAudit('get_fournisseur_360'),
       )
     );
   }
