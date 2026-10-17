@@ -83,6 +83,8 @@ export type CaMarginResult =
       success: true;
       axis: Axis;
       period: { date_debut: string; date_fin: string };
+      date_debut?: string;
+      date_fin?: string;
       rows: CaMarginRow[];
       totals: CaMarginTotals;
       row_count: number;
@@ -304,12 +306,14 @@ export async function calculateCaMarginTool(input: CaMarginInput): Promise<CaMar
     log.info({ axis: input.axis, row_count: rows.length }, 'CA/margin calculation completed');
 
     return {
-      success:   true,
-      axis:      input.axis,
-      period:    { date_debut: input.date_debut, date_fin: input.date_fin },
+      success:    true,
+      axis:       input.axis,
+      period:     { date_debut: input.date_debut, date_fin: input.date_fin },
+      date_debut: input.date_debut,
+      date_fin:   input.date_fin,
       rows,
       totals,
-      row_count: rows.length,
+      row_count:  rows.length,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

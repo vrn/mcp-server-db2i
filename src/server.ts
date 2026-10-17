@@ -553,10 +553,16 @@ const businessContextOutputSchema = z.object({
   hint: z.string().optional().describe('What to call next when the filters did not match exactly'),
 });
 
-const calculateCaMarginOutputSchema = z.object({
+export const calculateCaMarginOutputSchema = z.object({
   success: z.boolean(),
   error: z.string().optional(),
   axis: z.string().optional(),
+  period: z
+    .object({
+      date_debut: z.string(),
+      date_fin: z.string(),
+    })
+    .optional(),
   date_debut: z.string().optional(),
   date_fin: z.string().optional(),
   row_count: z.number().int().optional(),
@@ -564,7 +570,7 @@ const calculateCaMarginOutputSchema = z.object({
   totals: z.record(z.string(), z.unknown()).optional(),
 });
 
-const client360OutputSchema = z.object({
+export const client360OutputSchema = z.object({
   success: z.boolean(),
   error: z.string().optional(),
   cdsoc: z.string().optional(),
@@ -577,10 +583,10 @@ const client360OutputSchema = z.object({
   top_articles: z.array(z.record(z.string(), z.unknown())).optional(),
   alertes: z.record(z.string(), z.unknown()).optional(),
   transport: z.record(z.string(), z.unknown()).optional(),
-  commandes_en_cours: z.record(z.string(), z.unknown()).optional(),
+  commandes_en_cours: z.array(z.record(z.string(), z.unknown())).optional(),
 });
 
-const fournisseur360OutputSchema = z.object({
+export const fournisseur360OutputSchema = z.object({
   success: z.boolean(),
   error: z.string().optional(),
   cdsoc: z.string().optional(),
@@ -1632,11 +1638,13 @@ export function createServer(sessionContext?: SessionContext): McpServer {
         title: 'Fiche client 360°',
         description:
           'Retourne une fiche complète à 360° pour un client du groupe TINI (IBM i / DB2 for i). ' +
-          'Contient 5 blocs : identité (raison sociale, adresse, représentant, catégorie), ' +
+          'Contient 7 blocs : identité (raison sociale, adresse, représentant, catégorie), ' +
           'CA HT + marge brute N et N-1 calculés depuis les factures (CFACENT/CFACLGN), ' +
-          'tendance mensuelle sur 24 mois depuis CRMCAHT (pré-agrégé), ' +
-          'top 10 articles par CA depuis CRMCONSO, ' +
-          'alertes (encours HT/comptable, code surveillance, blocage BIL, taux RFA).',
+          'tendance mensuelle sur 24 mois glissants calculée depuis les factures, ' +
+          'top 10 articles par CA sur 3 ans, ' +
+          'alertes (encours HT/comptable, code surveillance, blocage BIL, taux RFA), ' +
+          'transport (tournée principale, transporteur, répartition géographique des sites, coûts et facturation de fret), ' +
+          'et commandes en cours non soldées (CCMDENT/CCMDLGN).',
         annotations: READ_ONLY_ANNOTATIONS,
         inputSchema: z.object({
           ...common,
@@ -1662,8 +1670,8 @@ export function createServer(sessionContext?: SessionContext): McpServer {
             .min(0)
             .optional()
             .describe(
-              'N° adresse de livraison — filtre CRMCAHT et CRMCONSO sur une agence précise du client. ' +
-              'Sans ce paramètre, toutes les adresses sont agrégées (vue globale client).'
+              'N° adresse de livraison (LIVADRNUM) — filtre les factures, le transport et les commandes en cours ' +
+              'sur une adresse précise du client. Sans ce paramètre, toutes les adresses sont agrégées (vue globale client).'
             ),
         }),
         outputSchema: client360OutputSchema,
@@ -1684,11 +1692,12 @@ export function createServer(sessionContext?: SessionContext): McpServer {
         title: 'Fiche fournisseur 360°',
         description:
           'Retourne une fiche complète à 360° pour un fournisseur du groupe TINI (IBM i / DB2 for i). ' +
-          'Contient 5 blocs : identité (raison sociale, adresse, délai livraison, blocage), ' +
+          'Contient 6 blocs : identité (raison sociale, adresse, délai livraison, blocage), ' +
           'achats HT N et N-1 calculés depuis les BL fournisseur (FLIVENT/FLIVLGN), ' +
-          'tendance mensuelle sur 24 mois glissants (calculée, pas pré-agrégée), ' +
+          'tendance mensuelle sur 24 mois glissants, ' +
           'top 10 articles par montant achat HT sur l\'année N, ' +
-          'alertes (blocage fournisseur, taux RFA, montant RFA obtenu, seuil RFA).',
+          'alertes (blocage fournisseur, taux RFA, montant RFA obtenu, seuil RFA), ' +
+          'et transport (conditions franco, délai, frais de port et transport N et N-1).',
         annotations: READ_ONLY_ANNOTATIONS,
         inputSchema: z.object({
           ...common,

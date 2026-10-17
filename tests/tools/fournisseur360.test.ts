@@ -17,6 +17,7 @@ vi.mock('../../src/db/connection.js', () => ({
 }));
 
 import { getFournisseur360Tool } from '../../src/tools/fournisseur360.js';
+import { fournisseur360OutputSchema } from '../../src/server.js';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -127,6 +128,7 @@ describe('getFournisseur360Tool', () => {
       expect(result.top_articles).toBeDefined();
       expect(result.alertes).toBeDefined();
       expect(result.transport).toBeDefined();
+      expect(() => fournisseur360OutputSchema.parse(result)).not.toThrow();
     });
 
     it('maps identite correctly', async () => {

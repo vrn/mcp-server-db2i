@@ -16,6 +16,7 @@ vi.mock('../../src/db/connection.js', () => ({
 }));
 
 import { getClient360Tool } from '../../src/tools/client360.js';
+import { client360OutputSchema } from '../../src/server.js';
 
 // ---------------------------------------------------------------------------
 // Fixture data
@@ -178,6 +179,7 @@ describe('getClient360Tool', () => {
       expect(result.alertes).toBeDefined();
       expect(result.transport).toBeDefined();
       expect(result.commandes_en_cours).toBeDefined();
+      expect(() => client360OutputSchema.parse(result)).not.toThrow();
     });
 
     it('maps commandes_en_cours correctly', async () => {

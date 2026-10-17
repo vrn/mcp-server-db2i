@@ -17,6 +17,7 @@ vi.mock('../../src/db/connection.js', () => ({
 }));
 
 import { calculateCaMarginTool } from '../../src/tools/caMargin.js';
+import { calculateCaMarginOutputSchema } from '../../src/server.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -118,6 +119,9 @@ describe('calculateCaMarginTool', () => {
       expect(result.totals.cout_achat_ht).toBe(210);
       expect(result.totals.marge_ht).toBe(90);
       expect(result.totals.taux_marge_pct).toBe(30);
+      expect(() => calculateCaMarginOutputSchema.parse(result)).not.toThrow();
+      const parsed = calculateCaMarginOutputSchema.parse(result);
+      expect(parsed.period).toEqual({ date_debut: '20250101', date_fin: '20251231' });
     });
 
     it('returns taux_marge_pct: null when CA = 0', async () => {
